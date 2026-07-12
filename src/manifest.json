@@ -1,0 +1,7 @@
+{
+  "core": ["core/util.js", "core/vfs.js", "c/lexer.js", "c/cpp.js", "c/types.js", "c/parser.js", "c/codegen.js", "c/memory.js", "c/linker.js", "c/vm.js", "c/libc.js", "c/headers.js", "c/build.js", "c/debug.js"],
+  "stage": ["stage/recorder.js", "stage/stage.js", "stage/topics.js", "stage/kit-list.js", "stage/kit-*.js"],
+  "topics": ["topics/*.js"],
+  "app": ["app/ui.js", "app/highlight.js", "app/zip.js", "app/share.js", "app/author.js", "app/sound.js", "app/grapheditor.js", "app/player.js", "app/courses.js", "app/compare.js", "app/app.js"],
+  "css": ["app/styles.css", "app/styles-*.css"]
+}

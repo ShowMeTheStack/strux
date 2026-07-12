@@ -1,0 +1,14 @@
+{
+  "name": "strux",
+  "version": "1.0.0",
+  "description": "Data structures and algorithms in C89, animated from real running code.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node tools/check-topics.mjs",
+    "e2e": "node tests/e2e/run.mjs"
+  },
+  "author": "Jyotiprakash Mishra <mail@jyotiprakash.org>",
+  "license": "GPL-3.0-or-later"
+}
