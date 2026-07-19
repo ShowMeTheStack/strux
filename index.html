@@ -9732,6 +9732,124 @@ void perror(const char *s)
   };
 })(SEE);
 
+// ==== stage/kit-graph.js ====
+// Graphs: the input (vertices, edges, weights, where each vertex sits), the C arrays that hold it, and
+// the picture: vertices as circles, edges as lines or arrows with their weights, and whatever the
+// algorithm keeps per vertex (visited, distance, parent) as labels and colours.
+(function (SEE) {
+  'use strict';
+  const X = SEE.Strux;
+  const G = X.GraphKit = {};
+
+  /** Parse "0-1 0-2:5 2>3" into edges; '-' undirected, '>' directed, ':w' a weight */
+  G.parse = function (text) {
+    const edges = [];
+    for (const tok of String(text || '').trim().split(/[\s,;]+/).filter(Boolean)) {
+      const m = /^(\d+)\s*([->])\s*(\d+)(?::(-?\d+))?$/.exec(tok);
+      if (!m) throw new Error('"' + tok + '" is not an edge like 0-1, 2>3 or 1-4:7');
+      edges.push([+m[1], +m[3], m[4] === undefined ? 1 : +m[4], m[2] === '>']);
+    }
+    return edges;
+  };
+  G.format = (edges) => edges.map(([u, v, w, d]) => u + (d ? '>' : '-') + v + (w !== 1 ? ':' + w : '')).join(' ');
+
+  /** Positions for n vertices: given ones, or a circle */
+  G.positions = function (n, given, opts) {
+    opts = opts || {};
+    const out = [];
+    const R = opts.radius || Math.max(190, n * 32);
+    for (let i = 0; i < n; i++) {
+      if (given && given[i]) out.push({ x: given[i][0], y: given[i][1] });
+      else out.push({ x: R * Math.cos(-Math.PI / 2 + 2 * Math.PI * i / n), y: R * Math.sin(-Math.PI / 2 + 2 * Math.PI * i / n) });
+    }
+    return out;
+  };
+
+  /** C initialisers for an adjacency matrix of n vertices (weights; 0 means no edge) */
+  G.matrixInit = function (n, edges, directed) {
+    const m = [];
+    for (let i = 0; i < n; i++) m.push(new Array(n).fill(0));
+    for (const [u, v, w, d] of edges) { m[u][v] = w; if (!(d || directed)) m[v][u] = w; }
+    return '{\n' + m.map((r) => '        { ' + r.join(', ') + ' }').join(',\n') + '\n    }';
+  };
+  /** C initialisers for an edge list: three parallel arrays */
+  G.edgeArrays = function (edges) {
+    return {
+      from: '{ ' + (edges.length ? edges.map((e) => e[0]).join(', ') : '0') + ' }',
+      to: '{ ' + (edges.length ? edges.map((e) => e[1]).join(', ') : '0') + ' }',
+      w: '{ ' + (edges.length ? edges.map((e) => e[2]).join(', ') : '0') + ' }',
+    };
+  };
+
+  /**
+   * The graph picture. opts: {n, edges, pos, directed, weighted, vcls(v) -> classes, vsub(v) -> label,
+   *   ecls(u, v, w) -> classes, elabel(u, v, w) -> text, prefix}
+   */
+  G.picture = function (opts) {
+    const items = [];
+    const P = opts.prefix || 'g';
+    const pos = opts.pos;
+    for (let v = 0; v < opts.n; v++) {
+      items.push({ key: P + 'v' + v, kind: 'vertex', x: pos[v].x, y: pos[v].y, r: opts.r || 24, text: opts.vtext ? opts.vtext(v) : v, sub: opts.vsub ? opts.vsub(v) : '', subAbove: !!opts.subAbove, cls: opts.vcls ? opts.vcls(v) || '' : '', pick: true });
+    }
+    const seen = new Set();
+    for (const [u, v, w, d] of opts.edges) {
+      const dir = d || opts.directed;
+      const k = dir ? u + '>' + v : Math.min(u, v) + '-' + Math.max(u, v);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      // two directed edges between the same pair bend apart
+      const twin = dir && opts.edges.some((e) => e[0] === v && e[1] === u);
+      items.push({
+        key: P + 'e' + k, kind: 'arrow', from: { key: P + 'v' + u }, to: { key: P + 'v' + v }, noHead: !dir, bend: twin ? 18 : 0,
+        label: opts.weighted ? String(opts.elabel ? opts.elabel(u, v, w) : w) : (opts.elabel ? opts.elabel(u, v, w) : ''),
+        cls: 'g-edge' + (opts.ecls ? ' ' + (opts.ecls(u, v, w) || '') : ''),
+      });
+    }
+    return items;
+  };
+
+  /** A row of labelled cells under the graph: an array the algorithm keeps per vertex */
+  G.table = function (key, title, values, opts) {
+    opts = opts || {};
+    const items = [];
+    const x0 = opts.x0 || 0, y0 = opts.y0 || 0, w = opts.w || 46;
+    items.push({ key: key + 'T', kind: 'text', x: x0 - 12, y: y0 + w / 2 + 5, text: title, cls: 'code-text', anchor: 'end' });
+    values.forEach((v, i) => {
+      items.push({ key: key + i, kind: 'cell', x: x0 + i * (w + 4), y: y0, w, h: w, text: v === null || v === undefined ? '' : v, sub: opts.noSub ? '' : i, cls: opts.cls ? opts.cls(i, v) || '' : '' });
+    });
+    return items;
+  };
+
+  /** A queue or stack shown as a strip of cells, front on the left */
+  G.strip = function (key, title, values, opts) {
+    opts = opts || {};
+    const items = [];
+    const x0 = opts.x0 || 0, y0 = opts.y0 || 0, w = opts.w || 46;
+    items.push({ key: key + 'T', kind: 'text', x: x0 - 12, y: y0 + w / 2 + 5, text: title, cls: 'code-text', anchor: 'end' });
+    if (!values.length) items.push({ key: key + 'E', kind: 'text', x: x0, y: y0 + w / 2 + 5, text: opts.empty || 'empty', cls: 'free-text' });
+    // cells keyed by the value and its occurrence, so an item slides along as the queue moves
+    const count = new Map();
+    values.forEach((v, i) => {
+      const c = count.get(v) || 0;
+      count.set(v, c + 1);
+      items.push({ key: key + 'q' + v + '_' + c, kind: 'cell', x: x0 + i * (w + 4), y: y0, w, h: w, text: v, sub: '', cls: (opts.cls ? opts.cls(i, v) || '' : ''), enter: 'fly', from: { x: x0 + values.length * (w + 4) + 30, y: y0 }, exit: 'fade' });
+    });
+    return items;
+  };
+
+  /** The graph input box: an edge list, with checks */
+  G.input = (def, opts) => Object.assign({ id: 'graph', kind: 'text', label: 'Edges (0-1, 2>3, 1-4:7)', def, check: (v, all) => {
+    let edges;
+    try { edges = G.parse(v); } catch (e) { return e.message; }
+    const n = all.n;
+    if (edges.some(([u, w]) => u >= n || w >= n || u < 0 || w < 0)) return 'Edges: every vertex must be between 0 and ' + (n - 1);
+    if (edges.some(([u, w]) => u === w)) return 'Edges: no edge from a vertex to itself';
+    if (opts && opts.weighted && edges.some((e) => e[2] < 0 && !opts.negative)) return 'Edges: weights must not be negative here';
+    return null;
+  } }, opts || {});
+})(SEE);
+
 // ==== stage/kit-tree.js ====
 // Drawing trees. Nodes are circles placed by their in-order position (x) and depth (y), so after a
 // rotation every node glides to its new place and the tree stays readable. Child links are arrows,
@@ -10037,6 +10155,150 @@ struct node *insert(struct node *root, int key)
       { q: 'Inserting 10, 20, 30, 40 in this order gives...', options: ['A balanced tree', 'A chain going right', 'A chain going left', 'An error'], answer: 1, why: 'Each key is bigger than all before it, so each becomes the right child of the last: a linked list in disguise.' },
       { q: 'How many comparisons does insert make in a tree of height h?', options: ['1', 'h at most', 'n always', 'log n always'], answer: 1, why: 'One per level on the way down: at most h. In a balanced tree h is about log n; in a chain it is n.' },
     ],
+  });
+})(SEE);
+
+// ==== topics/graph-1.js ====
+// Graphs: the family and breadth-first search.
+(function (SEE) {
+  'use strict';
+  const X = SEE.Strux, G = X.GraphKit;
+
+  X.family({
+    id: 'graph', order: 1, group: 'Graphs', title: 'Graph traversal',
+    blurb: 'Vertices and edges, stored as a matrix or as lists, and the two ways of visiting all of them: by layers and by going deep.',
+    head: `#include <stdio.h>
+
+#define MAXV 10
+
+/* adj[u][v] is the weight of the edge from u to v; 0 means there is no edge */
+int adj[MAXV][MAXV];`,
+  });
+  // a few graphs with good positions, so the picture is clear
+  X.graphPresets = {
+    house: { n: 6, graph: '0-1 0-2 1-3 2-3 2-4 3-5 4-5', pos: [[0, -150], [-130, -40], [130, -40], [-130, 120], [130, 120], [0, 230]] },
+    tree: { n: 7, graph: '0-1 0-2 1-3 1-4 2-5 2-6', pos: [[0, -140], [-150, -20], [150, -20], [-220, 110], [-80, 110], [80, 110], [220, 110]] },
+    ring: { n: 6, graph: '0-1 1-2 2-3 3-4 4-5 5-0', pos: null },
+    two: { n: 7, graph: '0-1 1-2 2-0 3-4 4-5 5-6', pos: [[-220, -60], [-120, -140], [-120, 20], [60, -60], [160, -140], [260, -60], [160, 40]] },
+    dense: { n: 6, graph: '0-1 0-2 0-3 1-2 1-4 2-3 2-5 3-5 4-5', pos: [[0, -160], [-170, -50], [0, -20], [170, -50], [-120, 140], [120, 140]] },
+  };
+  X.graphMain = (inp, call, directed) => {
+    const edges = G.parse(inp.graph);
+    return `int main(void)
+{
+    int init[MAXV][MAXV] = ${G.matrixInit(10, edges, directed).replace(/\n {8}/g, '\n        ')};
+    int i, j;
+    for (i = 0; i < MAXV; i++)
+        for (j = 0; j < MAXV; j++)
+            adj[i][j] = init[i][j];
+    ${call}
+    return 0;
+}`;
+  };
+  X.graphInputs = (extra) => [
+    { id: 'n', kind: 'int', label: 'Vertices', def: 6, lo: 1, hi: 10 },
+    G.input('0-1 0-2 1-3 2-3 2-4 3-5 4-5'),
+    { id: 'pos', kind: 'hidden', def: X.graphPresets.house.pos },
+  ].concat(extra || []);
+
+  // ---- breadth-first search --------------------------------------------------------------------------------
+  X.topic({
+    id: 'bfs', family: 'graph', order: 10, title: 'Breadth-first search',
+    blurb: 'A queue decides the order: first the start, then everything one edge away, then everything two edges away, like ripples on water.',
+    code: `/* visit every vertex reachable from s, nearest first */
+void bfs(int n, int s)
+{
+    int visited[MAXV] = { 0 };
+    int dist[MAXV];
+    int queue[MAXV];
+    int front = 0, rear = 0;
+    int u, v;
+    visited[s] = 1;                           /*@ mark-start */
+    dist[s] = 0;
+    queue[rear++] = s;                        /*@ enqueue-start */
+    while (front < rear) {                    /*@ loop */
+        u = queue[front++];                   /*@ dequeue */
+        printf("visit %d (distance %d)\\n", u, dist[u]);   /*@ visit */
+        for (v = 0; v < n; v++) {             /*@ scan */
+            if (adj[u][v] && !visited[v]) {   /*@ check */
+                visited[v] = 1;               /*@ discover */
+                dist[v] = dist[u] + 1;        /*@ dist */
+                queue[rear++] = v;            /*@ enqueue */
+            }
+        }
+    }
+}`,
+    animate: ['bfs'],
+    inputs: X.graphInputs([{ id: 's', kind: 'int', label: 'Start at', def: 0, lo: 0, hi: 9 }]),
+    check: (inp) => (inp.s >= inp.n ? 'Start at: a vertex from 0 to ' + (inp.n - 1) : null),
+    presets: [
+      { label: 'House', values: Object.assign({ s: 0 }, X.graphPresets.house) },
+      { label: 'Tree', values: Object.assign({ s: 0 }, X.graphPresets.tree) },
+      { label: 'Ring', values: Object.assign({ s: 0 }, X.graphPresets.ring) },
+      { label: 'Two parts', values: Object.assign({ s: 0 }, X.graphPresets.two) },
+    ],
+    counters: ['compares', 'writes'],
+    main: (inp) => X.graphMain(inp, 'bfs(' + inp.n + ', ' + inp.s + ');'),
+    capture(P) {
+      const n = P.val('n', 0) || 0;
+      const g = (name) => P.arr(name, n);
+      return { visited: g('visited'), dist: g('dist'), queue: P.arr('queue', n), front: P.val('front', 0), rear: P.val('rear', 0), u: P.isSet('u', 0) ? P.val('u', 0) : null, v: P.isSet('v', 0) ? P.val('v', 0) : null, n };
+    },
+    scene(ctx) {
+      const d = ctx.tick.data, tag = ctx.tick.tag, inp = ctx.input;
+      const edges = G.parse(inp.graph);
+      const pos = G.positions(inp.n, inp.pos);
+      const memo = ctx.memo;
+      memo.parent = memo.parent || {};
+      memo.done = memo.done || new Set();
+      if (tag === 'discover' && d.v !== null) memo.parent[d.v] = d.u;
+      if (tag === 'dequeue' && memo.cur !== undefined && memo.cur !== null) memo.done.add(memo.cur);
+      if (tag === 'dequeue') memo.cur = d.u;
+      if (tag === 'after') { if (memo.cur !== null && memo.cur !== undefined) memo.done.add(memo.cur); memo.cur = null; }
+      const inQueue = new Set(d.queue && d.front !== null ? d.queue.slice(d.front, d.rear) : []);
+      const isTree = (a, b) => memo.parent[b] === a || memo.parent[a] === b;
+      const checking = (tag === 'check' || tag === 'scan') && d.u !== null && d.v !== null && d.v < inp.n;
+      const items = G.picture({
+        n: inp.n, edges, pos,
+        vcls: (v) => (v === d.u && memo.cur === v && tag !== 'after' ? 'focus hot' : memo.done.has(v) ? 'done' : inQueue.has(v) ? 'part-b' : d.visited && d.visited[v] ? 'part-b' : ''),
+        vsub: (v) => (d.visited && d.visited[v] && d.dist && d.dist[v] !== null ? 'd=' + d.dist[v] : ''),
+        ecls: (a, b) => ((checking && ((a === d.u && b === d.v) || (b === d.u && a === d.v))) ? 'hot' : isTree(a, b) ? 'part-a' : 'dim'),
+      });
+      // the queue and the per-vertex arrays, under the graph
+      const maxY = Math.max(...pos.map((p) => p.y)) + 90;
+      const minX = Math.min(...pos.map((p) => p.x));
+      items.push(...G.strip('queue', 'queue', d.queue ? d.queue.slice(d.front, d.rear) : [], { x0: minX + 60, y0: maxY, empty: 'empty' }));
+      items.push(...G.table('vis', 'visited', (d.visited || []).map((x) => (x === null ? '' : x)), { x0: minX + 60, y0: maxY + 80, cls: (i, x) => (x ? 'part-b' : '') }));
+      if (checking) items.push({ key: 'cv', kind: 'cursor', at: 'gv' + d.v, side: 'above', text: 'v', cls: 'c-amber' });
+      if (d.u !== null && memo.cur === d.u && tag !== 'after') items.push({ key: 'cu', kind: 'cursor', at: 'gv' + d.u, side: 'left', text: 'u', cls: 'c-teal' });
+      let say = '';
+      const q = d.queue ? d.queue.slice(d.front, d.rear) : [];
+      switch (tag) {
+        case 'enter': say = 'bfs(' + inp.n + ', ' + inp.s + '): start at vertex ' + inp.s + '. Nothing is visited yet; the queue is empty.'; break;
+        case 'mark-start': say = 'Vertex ' + inp.s + ' is marked visited before anything else, so it can never be added to the queue twice.'; break;
+        case 'enqueue-start': say = 'The start goes into the queue, at distance 0. The queue holds the vertices that are found but not yet explored.'; break;
+        case 'loop': say = q.length ? 'The queue holds ' + q.join(', ') + ': there is more to explore.' : 'The queue is empty: every vertex reachable from ' + inp.s + ' has been explored.'; break;
+        case 'dequeue': say = 'Take the vertex at the front of the queue: u = ' + d.u + '. The queue is first in, first out, which is what makes the search go layer by layer.'; break;
+        case 'visit': say = 'Visit ' + d.u + ', at distance ' + d.dist[d.u] + ' from the start. Now look at all its neighbours.'; break;
+        case 'scan': say = d.v < inp.n ? 'Next candidate: v = ' + d.v + '.' : 'All neighbours of ' + d.u + ' have been looked at; ' + d.u + ' is finished.'; break;
+        case 'check': { const e = edges.some(([a, b]) => (a === d.u && b === d.v) || (a === d.v && b === d.u)); say = !e ? 'No edge between ' + d.u + ' and ' + d.v + '.' : d.visited[d.v] ? d.v + ' is a neighbour, but it is already visited: skip it.' : d.v + ' is a neighbour that nobody has found yet.'; break; }
+        case 'discover': say = 'Mark ' + d.v + ' visited now, as it is found, not later when it is explored.'; break;
+        case 'dist': say = d.v + ' is one edge further than ' + d.u + ': distance ' + d.dist[d.v] + '. The edge ' + d.u + '–' + d.v + ' joins the search tree.'; break;
+        case 'enqueue': say = d.v + ' joins the back of the queue: ' + q.join(', ') + '. It waits behind every vertex found before it.'; break;
+        case 'after': say = 'Done. The green edges form the BFS tree: following them back from any vertex gives a shortest path to ' + inp.s + ' in number of edges.'; break;
+      }
+      return { items, say };
+    },
+    predict: [
+      { at: (t, i, ts) => ts[i + 1] && ts[i + 1].tag === 'dequeue' && i > 4, once: true, ask: 'Which vertex comes out of the queue next? Click it.', answer: (ts, i) => 'gv' + ts[i + 1].data.u, explain: () => 'The one at the front: it has waited longest.' },
+      { at: (t, i, ts) => t.tag === 'check' && ts[i + 1] && ts[i + 1].tag === 'discover', once: true, ask: (t) => 'Vertex ' + t.data.v + ' is a neighbour nobody has found. What will its distance be?', options: (ts, i) => { const d = ts[i].data; const r = d.dist[d.u]; return [r, r + 1, r + 2].map(String); }, pick: 'option', answer: (ts, i) => String(ts[i].data.dist[ts[i].data.u] + 1), explain: () => 'One more than the vertex it was found from.' },
+    ],
+    quiz: [
+      { q: 'Why does BFS mark a vertex visited when it is put in the queue, not when it comes out?', options: ['It is faster to type', 'So it cannot be put in the queue twice', 'To print it earlier', 'It makes no difference'], answer: 1, why: 'Another neighbour could find it again while it waits in the queue; marking it at once prevents a second copy.' },
+      { q: 'In an unweighted graph, BFS from s finds...', options: ['The longest paths', 'Shortest paths in number of edges', 'A minimum spanning tree', 'Only cycles'], answer: 1, why: 'Vertices come out in order of distance, so the first time one is found is along a shortest path.' },
+      { q: 'With an adjacency matrix, how much time does BFS take on n vertices?', options: ['O(n)', 'O(n log n)', 'O(n²)', 'O(2ⁿ)'], answer: 2, why: 'For each of the n vertices it scans a whole row of n entries.' },
+    ],
+    compareWith: 'dfs',
   });
 })(SEE);
 
