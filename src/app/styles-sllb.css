@@ -1,0 +1,66 @@
+/* sll-3.js topics (classes start with sb-): brackets, hops, comparison marks, call bands, groups */
+.it-line.sb-bracket line { stroke: var(--c-violet); stroke-width: 2.2; }
+.it-line.sb-bracket.sb-teal line { stroke: var(--c-teal); }
+.it-line.sb-bracket.sb-rose line { stroke: var(--c-rose); }
+.it-line.sb-bracket.sb-amber line { stroke: var(--c-amber); }
+.it-line.sb-bracket.sb-indigo line { stroke: var(--c-indigo); }
+.it-line.sb-bracket.sb-good line { stroke: var(--good); }
+.it-text.sb-bracket text { font: 700 13px var(--font); fill: var(--c-violet); }
+.it-text.sb-bracket.sb-teal text { fill: var(--c-teal); }
+.it-text.sb-bracket.sb-rose text { fill: var(--c-rose); }
+.it-text.sb-bracket.sb-amber text { fill: var(--c-amber); }
+.it-text.sb-bracket.sb-indigo text { fill: var(--c-indigo); }
+.it-text.sb-bracket.sb-good text { fill: var(--good); }
+.it-text.sb-note text { font: 600 14px var(--font); fill: var(--text); }
+.it-text.sb-muted text { font: 500 13px var(--font); fill: var(--muted); }
+.it-text.sb-good text { font: 700 15px var(--font); fill: var(--good); }
+.it-text.sb-bad text { font: 700 15px var(--font); fill: var(--bad); }
+.it-text.sb-hot text { font: 700 14px var(--font); fill: var(--hot); }
+.it-text.sb-phase text { font: 700 13px var(--font); fill: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.it-text.sb-idx text { font: 700 12px var(--mono); fill: var(--c-violet); }
+.it-text.sb-null text { font: 700 12px var(--mono); fill: var(--muted); }
+.it-region.sb-nullspot rect { fill: none; stroke: var(--node-line); stroke-dasharray: 3 3; }
+.it-arrow.sb-hop .arrow-path { stroke-dasharray: 6 5; stroke-width: 2.4; }
+.it-arrow.sb-hop.sb-rose .arrow-path { stroke: var(--c-rose); }
+.it-arrow.sb-hop.sb-teal .arrow-path { stroke: var(--c-teal); }
+.it-arrow.sb-hop.sb-amber .arrow-path { stroke: var(--c-amber); }
+.it-arrow.sb-hop.sb-violet .arrow-path { stroke: var(--c-violet); }
+.it-arrow.sb-hop .arrow-label { font: 700 12px var(--font); fill: var(--text); }
+.it-arrow.sb-cut .arrow-path { stroke: var(--bad); stroke-width: 3; stroke-dasharray: 3 4; }
+.it-arrow.sb-pair .arrow-path { stroke-width: 2; stroke-dasharray: 2 5; }
+.it-arrow.sb-pair.sb-good .arrow-path { stroke: var(--good); }
+.it-arrow.sb-pair.sb-bad .arrow-path { stroke: var(--bad); }
+.it-arrow.sb-pair .arrow-label { font: 700 14px var(--font); }
+.it-arrow.sb-pair.sb-good .arrow-label { fill: var(--good); }
+.it-arrow.sb-pair.sb-bad .arrow-label { fill: var(--bad); }
+.it-arrow.sb-pair.sb-wait .arrow-path { stroke: var(--hot); }
+.it-arrow.sb-pair.sb-wait .arrow-label { fill: var(--hot); }
+.it-arrow.sb-fresh .arrow-path { stroke: var(--part-a); stroke-width: 2.8; }
+.it-line.sb-scissors line { stroke: var(--bad); stroke-width: 2.5; stroke-dasharray: 6 4; }
+.it-line.sb-align line { stroke: var(--c-violet); stroke-width: 2; stroke-dasharray: 3 5; }
+.it-region.sb-band rect { fill: var(--surface2); stroke: var(--node-line); stroke-width: 1; }
+.it-region.sb-band.sb-top rect { fill: var(--hot-soft); stroke: var(--hot); stroke-width: 1.6; }
+.it-region.sb-band.sb-back rect { fill: var(--part-a-soft); stroke: var(--part-a); stroke-width: 1.2; }
+.it-region.sb-band text { font: 600 12px var(--mono); fill: var(--text); }
+.it-region.sb-grp-a rect { fill: var(--part-a-soft); stroke: var(--part-a); stroke-width: 1; stroke-dasharray: 4 4; opacity: 0.75; }
+.it-region.sb-grp-b rect { fill: var(--part-b-soft); stroke: var(--part-b); stroke-width: 1; stroke-dasharray: 4 4; opacity: 0.75; }
+.it-region.sb-on rect { stroke: var(--hot); stroke-width: 2.2; stroke-dasharray: none; opacity: 1; }
+.it-region.sb-grp-a text, .it-region.sb-grp-b text { font: 700 12px var(--font); fill: var(--text); }
+.it-region.sb-lane rect { fill: none; stroke: var(--node-line); stroke-width: 1; stroke-dasharray: 2 6; }
+.it-region.sb-lane text { font: 700 12px var(--font); fill: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.it-node.sb-dummy .node-box { stroke-dasharray: 5 4; stroke: var(--c-gray); }
+.it-node.sb-dummy .node-cell.val { fill: var(--surface2); }
+.it-node.sb-dummy .node-label { fill: var(--c-gray); }
+.it-node.sb-meet .node-box { stroke: var(--c-rose); stroke-width: 3.4; }
+.it-node.sb-entry .node-box { stroke: var(--hot); stroke-width: 3.4; }
+.it-node.sb-found .node-box { stroke: var(--good); stroke-width: 3.4; }
+.it-node.sb-found .node-cell.val { fill: var(--part-a-soft); }
+.it-node.sb-a .node-box { stroke: var(--c-teal); stroke-width: 2; }
+.it-node.sb-b .node-box { stroke: var(--c-amber); stroke-width: 2; }
+.it-node.sb-shared .node-cell.val { fill: var(--hot-soft); }
+.it-node.sb-dim > * { opacity: 0.4; }
+.it-node.sb-lbl .node-label { font: 700 12px var(--mono); fill: var(--c-violet); }
+.it-token.sb-tok .token-dot { stroke-width: 2.5; }
+.it-token.sb-tok .token-text { font: 700 11px var(--mono); }
+:root[data-theme="dark"] .it-token.sb-tok .token-text { fill: #0f1220; }
+:root[data-theme="dark"] .it-token.sb-tok .token-dot { stroke: #141829; }
