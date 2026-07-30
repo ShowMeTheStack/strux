@@ -1,0 +1,20 @@
+/* Doubly linked, circular and sentinel lists */
+.it-arrow.alt:not(.hot):not(.bad):not(.walked):not(.walked-back) .arrow-path { stroke: var(--part-b); }
+.it-arrow.walked .arrow-path { stroke: var(--c-teal); stroke-width: 3.4; }
+.it-arrow.walked-back .arrow-path { stroke: var(--c-violet); stroke-width: 3.4; }
+.it-node.sentinel .node-box { fill: var(--surface2); stroke-dasharray: 6 4; stroke-width: 2; }
+.it-node.sentinel .node-cell.val { fill: var(--surface2); }
+.it-node.sentinel .node-text.val { fill: var(--muted); }
+.it-node.doomed .node-box { stroke: var(--bad); stroke-width: 3; }
+.it-node.doomed .node-cell.val { fill: var(--freed); }
+.it-node.off-ring .node-box { stroke-dasharray: 5 3; }
+.free-text.check-todo { fill: var(--muted); }
+.free-text.legend-next { font: 600 12px var(--font); fill: var(--arrow); }
+.free-text.legend-prev { font: 600 12px var(--font); fill: var(--part-b); }
+.free-text.phase-out { font: 700 14px var(--font); fill: var(--c-teal); }
+.free-text.phase-back { font: 700 14px var(--font); fill: var(--c-violet); }
+.it-token.c-gray .token-dot { fill: var(--c-gray); }
+.free-text.ck { font: 600 18px var(--font); }
+.free-text.ck.check-todo { font-weight: 500; }
+.free-text.legend-next, .free-text.legend-prev { font-size: 14px; }
+.free-text.lnote { font: 650 16px var(--font); fill: var(--muted); }
