@@ -1,0 +1,65 @@
+/* Stacks, queues, deques and their applications */
+.it-node.sk-chip .node-box { stroke-width: 1.4; }
+.it-node.sk-chip .node-text { font: 650 14px var(--mono); }
+.it-node.sk-chip.sk-past > * { opacity: 0.45; }
+.it-node.sk-chip.sk-now .node-box { stroke: var(--hot); stroke-width: 3; fill: var(--hot-soft); }
+.it-text.sk-res .free-text { font: 600 11px var(--mono); fill: var(--muted); }
+.it-text.sk-res.bad .free-text { fill: var(--bad); }
+.it-region.sk-extent .region-box { fill: none; stroke: none; }
+.it-region.sk-slot .region-box { fill: none; stroke: var(--node-line); stroke-width: 1.3; stroke-dasharray: 4 4; }
+.it-region.sk-well .region-box { fill: var(--surface2); stroke: var(--node-line); stroke-width: 1.5; }
+.it-region.sk-waste .region-box { fill: color-mix(in srgb, var(--bad) 12%, transparent); stroke: var(--bad); stroke-width: 1.5; stroke-dasharray: 6 4; }
+.it-region.sk-waste .region-text { fill: var(--bad); }
+.it-region.sk-window .region-box { fill: var(--part-b-soft); stroke: var(--part-b); stroke-width: 1.5; }
+.it-region.sk-window .region-text { fill: var(--part-b); }
+.it-region.sk-frame .region-box { fill: color-mix(in srgb, var(--part-b) 7%, var(--surface)); stroke: var(--node-line); stroke-width: 1.4; }
+.it-region.sk-frame.sk-top .region-box { fill: color-mix(in srgb, var(--hot) 14%, var(--surface)); stroke: var(--hot); stroke-width: 2.4; }
+.it-region.sk-frame.sk-gone .region-box { fill: none; stroke: var(--node-line); stroke-dasharray: 5 4; }
+.it-region.sk-frame .region-text { font: 700 13px var(--mono); fill: var(--text); }
+.it-line.sk-ceiling .plain-line { stroke: var(--muted); stroke-width: 3; }
+.it-line.sk-ceiling.bad .plain-line { stroke: var(--bad); stroke-width: 4; }
+.it-line.sk-floor .plain-line { stroke: var(--muted); stroke-width: 3; }
+.it-line.sk-floor.bad .plain-line { stroke: var(--bad); stroke-width: 4; }
+.it-line.sk-link .plain-line { stroke: var(--muted); stroke-width: 1.4; stroke-dasharray: 3 4; }
+.it-line.sk-link.hot .plain-line { stroke: var(--hot); stroke-width: 2.4; stroke-dasharray: none; }
+.it-line.sk-pair .plain-line { stroke: var(--part-a); stroke-width: 2.6; }
+.it-line.sk-pair.bad .plain-line { stroke: var(--bad); stroke-dasharray: 6 4; }
+.it-cell.sk-garbage .cell-box { fill: none; stroke: var(--node-line); stroke-dasharray: 4 4; }
+.it-cell.sk-garbage .cell-text { fill: var(--muted); opacity: 0.6; font-style: italic; }
+.it-cell.sk-live .cell-box { fill: var(--part-b-soft); stroke: var(--part-b); stroke-width: 2; }
+.it-cell.sk-top .cell-box { stroke: var(--hot); stroke-width: 3; }
+.it-cell.sk-read .cell-box { stroke: var(--hot); stroke-width: 3; fill: var(--hot-soft); }
+.it-cell.sk-ok .cell-box { fill: var(--part-a-soft); stroke: var(--part-a); }
+.it-cell.sk-bad .cell-box { fill: color-mix(in srgb, var(--bad) 14%, var(--surface)); stroke: var(--bad); stroke-width: 2.5; }
+.it-cell.sk-plain .cell-box { fill: var(--surface2); }
+.it-cell.sk-plain .cell-text { fill: var(--muted); }
+.it-cell.sk-op .cell-box { fill: color-mix(in srgb, var(--c-violet) 14%, var(--surface)); stroke: var(--c-violet); }
+.it-cell.sk-small .cell-text { font-size: 14px; }
+.it-token.sk-bad .token-dot { fill: var(--bad); }
+.it-token.sk-big .token-text { font-size: 14px; }
+.it-text.sk-label .free-text { font: 600 13px var(--mono); fill: var(--muted); }
+.it-text.sk-label.hot .free-text { fill: var(--hot); }
+.it-text.sk-label.bad .free-text { fill: var(--bad); font-weight: 700; }
+.it-text.sk-label.good .free-text { fill: var(--good); font-weight: 700; }
+.it-text.sk-eq .free-text { font: 650 15px var(--mono); fill: var(--text); }
+.it-text.sk-eq.dim .free-text { fill: var(--muted); opacity: 0.7; }
+.it-text.sk-eq.hot .free-text { fill: var(--hot); }
+.it-text.sk-eq.good .free-text { fill: var(--good); }
+.it-text.sk-cmp .free-text { font: 650 14px var(--mono); fill: var(--hot); }
+.it-node.sk-card .node-box { stroke: var(--c-teal); stroke-width: 2; }
+.it-node.sk-card.sk-erase .node-box { stroke: var(--c-rose); }
+.it-node.sk-card .node-text { font: 650 14px var(--mono); }
+.it-node.sk-card.sk-hot .node-box { stroke: var(--hot); stroke-width: 3; fill: var(--hot-soft); }
+.it-node.sk-frame-card .node-box { stroke: var(--c-indigo); stroke-width: 2; }
+.it-node.sk-frame-card .node-text { font: 650 14px var(--mono); }
+.it-node.sk-frame-card.sk-top .node-box { stroke: var(--hot); stroke-width: 3; }
+.it-node.sk-frame-card.sk-main .node-box { stroke: var(--node-line); }
+.it-node.sk-frame-card .node-cell.sk-new { fill: var(--hot-soft); }
+.it-node.sk-frame-card .node-cell.sk-done { fill: var(--part-a-soft); }
+.it-node.sk-editor .node-box { stroke: var(--c-indigo); stroke-width: 2; }
+.it-node.sk-editor .node-text { font: 650 18px var(--mono); }
+.it-text.sk-title .free-text { font: 700 13px var(--font); fill: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.it-text.sk-idx .free-text { font: 500 12px var(--mono); fill: var(--muted); }
+.it-text.sk-null .free-text { font: 700 12px var(--mono); fill: var(--muted); }
+.it-region.sk-null .region-box { fill: none; stroke: var(--node-line); stroke-dasharray: 3 3; }
+.it-cell.sk-op.sk-top .cell-box, .it-cell.sk-live.sk-top .cell-box, .it-cell.sk-plain.sk-top .cell-box { stroke: var(--hot); stroke-width: 3; }
