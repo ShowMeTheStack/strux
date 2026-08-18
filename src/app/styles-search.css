@@ -1,0 +1,71 @@
+/* Searching topics: ruled-out elements, probes, the live range, the key level on bar charts.
+   An item's classes sit on its <g>, so the selectors go through .it-<kind>. */
+.it-cell.out > * { opacity: 0.34; }
+.it-cell.out .cell-box { stroke-dasharray: 4 4; }
+.it-cell.seen .cell-box { fill: var(--surface2); stroke-dasharray: 4 3; }
+.it-cell.seen .cell-text { fill: var(--muted); }
+.it-cell.probe .cell-box { fill: var(--hot-soft); stroke: var(--hot); stroke-width: 3; }
+.it-cell.found .cell-box { fill: var(--good); stroke: var(--good); }
+.it-cell.found .cell-text { fill: #fff; }
+.it-cell.sentinel .cell-box { fill: color-mix(in srgb, var(--c-rose) 16%, var(--node)); stroke: var(--c-rose); stroke-width: 2.6; stroke-dasharray: 7 3; }
+.it-cell.match .cell-box { stroke: var(--part-a); stroke-width: 2.6; }
+.it-cell.blockend .cell-box { stroke: var(--c-violet); stroke-width: 2.6; }
+.it-bar.out .bar-box { opacity: 0.16; }
+.it-bar.probe .bar-box { fill: var(--hot); opacity: 1; }
+.it-bar.found .bar-box { fill: var(--good); opacity: 1; }
+.it-bar.half-a .bar-box { fill: var(--part-a); opacity: 0.85; }
+.it-node.saved .node-box { stroke: var(--c-violet); stroke-width: 2.4; }
+.it-node.saved .node-label { fill: var(--c-violet); font-weight: 700; }
+
+.it-region.bracket .region-box { fill: none; stroke: var(--c-indigo); stroke-width: 2.6; }
+.it-region.bracket.amber .region-box { stroke: var(--c-amber); }
+.it-region.bracket.green .region-box { stroke: var(--part-a); }
+.it-region.block .region-box { fill: none; stroke: var(--node-line); stroke-width: 1.5; stroke-dasharray: 3 4; }
+.it-region.block.on .region-box { fill: var(--hot-soft); stroke: var(--hot); stroke-dasharray: none; }
+.it-region.band .region-box { fill: var(--part-a-soft); stroke: var(--part-a); stroke-width: 1.5; opacity: 0.8; }
+.it-region.band.miss .region-box { fill: var(--surface2); stroke: var(--node-line); }
+.it-region.run .region-box { fill: var(--part-a-soft); stroke: var(--part-a); stroke-width: 1; stroke-dasharray: 4 3; }
+.it-region.spare .region-box { fill: none; stroke: var(--c-rose); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.it-region.chip .region-box { stroke-width: 1.5; }
+.it-region.chip.lt .region-box { fill: var(--part-b-soft); stroke: var(--part-b); }
+.it-region.chip.ge .region-box { fill: var(--part-a-soft); stroke: var(--part-a); }
+.it-region.chip.unk .region-box { fill: none; stroke: var(--node-line); stroke-dasharray: 3 3; }
+.it-region.panel .region-box { fill: var(--surface); stroke: var(--border); stroke-width: 1.5; }
+
+.it-text.s-title .free-text { font: 700 13px var(--font); fill: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.it-text.s-note .free-text { font: 500 13px var(--font); fill: var(--muted); }
+.it-text.s-strip .free-text { font: 600 15px var(--font); fill: var(--text); }
+.it-text.s-good .free-text { font: 700 15px var(--font); fill: var(--good); }
+.it-text.s-bad .free-text { font: 700 15px var(--font); fill: var(--bad); }
+.it-text.s-hot .free-text { font: 700 15px var(--font); fill: var(--hot); }
+.it-text.s-chip .free-text { font: 700 14px var(--mono); fill: var(--text); }
+.it-text.s-chip.unk .free-text { fill: var(--muted); }
+.it-text.s-bracket .free-text { font: 700 13px var(--font); fill: var(--c-indigo); }
+.it-text.s-bracket.amber .free-text { fill: var(--c-amber); }
+.it-text.s-x .free-text { font: 700 18px var(--font); fill: var(--bad); }
+.it-text.s-ok .free-text { font: 700 18px var(--font); fill: var(--good); }
+.it-text.s-formula .free-text { font: 600 15px var(--mono); fill: var(--text); }
+.it-text.s-rose .free-text { font: 700 12px var(--font); fill: var(--c-rose); text-transform: uppercase; letter-spacing: 0.05em; }
+.it-text.s-violet .free-text { font: 700 13px var(--font); fill: var(--c-violet); }
+.it-text.s-amber .free-text { font: 700 13px var(--font); fill: var(--c-amber); }
+.it-text.s-indigo .free-text { font: 700 13px var(--font); fill: var(--c-indigo); }
+
+.it-line.key-level .plain-line { stroke: var(--c-rose); stroke-width: 2.5; stroke-dasharray: 9 5; }
+.it-line.interp .plain-line { stroke: var(--c-indigo); stroke-width: 3; }
+.it-line.drop .plain-line { stroke: var(--hot); stroke-width: 2.5; stroke-dasharray: 3 4; }
+.it-line.axis .plain-line { stroke: var(--node-line); stroke-width: 1.5; }
+.it-line.wall .plain-line { stroke: var(--c-rose); stroke-width: 4; }
+.it-line.boundary .plain-line { stroke: var(--hot); stroke-width: 4; }
+.it-line.cmp .plain-line { stroke: var(--hot); stroke-width: 2.5; stroke-dasharray: 6 4; }
+
+.it-token.search-key .token-text { font-size: 13px; }
+.it-token.guess .token-dot { fill: var(--hot); }
+.it-token.guess .token-text { font-size: 14px; }
+.it-token.frog .token-dot { fill: var(--c-violet); }
+.it-token.cross .token-dot { fill: var(--c-amber); }
+.it-token.ghosted { opacity: 0.45; }
+.it-arrow.hop .arrow-path { stroke: var(--c-violet); stroke-width: 2.4; }
+.it-arrow.hop.old .arrow-path { stroke: var(--node-line); stroke-width: 1.8; }
+.it-arrow.hop .arrow-label { fill: var(--c-violet); font-weight: 700; font-size: 13px; }
+.it-arrow.hop.old .arrow-label { fill: var(--muted); }
+:root[data-theme="dark"] .it-token.guess .token-text, :root[data-theme="dark"] .it-token.frog .token-text { fill: #0f1220; }
