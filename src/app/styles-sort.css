@@ -1,0 +1,50 @@
+/* sorting, part A (bubble, selection, insertion, merge, shell): classes are prefixed sa- */
+.it-bar.sa-pair .bar-box { stroke: var(--hot); stroke-width: 3; opacity: 1; }
+.it-bar.sa-min .bar-box { fill: var(--c-rose); opacity: 1; }
+.it-bar.sa-target .bar-box { stroke: var(--c-teal); stroke-width: 3; stroke-dasharray: 6 4; }
+.it-bar.sa-key .bar-box { fill: var(--c-green); opacity: 1; stroke: var(--text); stroke-width: 2; }
+.it-bar.sa-g0 .bar-box { fill: var(--c-teal); } .it-bar.sa-g1 .bar-box { fill: var(--c-amber); } .it-bar.sa-g2 .bar-box { fill: var(--c-violet); }
+.it-bar.sa-g3 .bar-box { fill: var(--c-rose); } .it-bar.sa-g4 .bar-box { fill: var(--c-indigo); } .it-bar.sa-g5 .bar-box { fill: var(--c-green); }
+.it-bar.sa-faint .bar-box { opacity: 0.2; }
+.it-bar.sa-faint .bar-text { opacity: 0.45; }
+
+.it-line.sa-g0 .plain-line { stroke: var(--c-teal); } .it-line.sa-g1 .plain-line { stroke: var(--c-amber); } .it-line.sa-g2 .plain-line { stroke: var(--c-violet); }
+.it-line.sa-g3 .plain-line { stroke: var(--c-rose); } .it-line.sa-g4 .plain-line { stroke: var(--c-indigo); } .it-line.sa-g5 .plain-line { stroke: var(--c-green); }
+.it-line.sa-lane .plain-line { stroke-width: 4; stroke-linecap: round; }
+.it-line.sa-lane.sa-faint .plain-line { opacity: 0.25; }
+.it-line.sa-cmp .plain-line { stroke: var(--hot); stroke-width: 3; stroke-dasharray: 7 5; }
+.it-line.sa-wall .plain-line { stroke: var(--part-a); stroke-width: 2; stroke-dasharray: 5 5; }
+.it-line.sa-hop .plain-line { stroke: var(--hot); stroke-width: 2.5; }
+
+.it-text.sa-hot .free-text { fill: var(--hot); font-weight: 700; font-size: 15px; }
+.it-text.sa-good .free-text { fill: var(--part-a); font-weight: 700; }
+.it-text.sa-log .free-text { fill: var(--text); }
+.it-text.sa-code .free-text { font: 600 14px var(--mono); fill: var(--text); }
+.it-text.sa-title .free-text { font: 700 13px var(--font); fill: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.it-text.sa-depth .free-text { font: 600 14px var(--mono); fill: var(--muted); }
+.it-text.sa-depth.sa-on .free-text { fill: var(--text); font-weight: 700; }
+.it-text.sa-seq .free-text { font: 700 16px var(--mono); fill: var(--muted); }
+.it-text.sa-seq.sa-on .free-text { fill: var(--hot); }
+.it-text.sa-seq.sa-past .free-text { opacity: 0.45; text-decoration: line-through; }
+
+.it-region.sa-pairbox .region-box { fill: var(--hot-soft); stroke: var(--hot); stroke-width: 1.5; opacity: 0.7; }
+.it-region.sa-zone .region-box { fill: var(--part-b-soft); opacity: 0.8; }
+.it-region.sa-sorted .region-box { fill: var(--part-a-soft); stroke: var(--part-a); stroke-width: 1.5; opacity: 0.85; }
+.it-region.sa-sorted .region-text { fill: var(--part-a); }
+.it-region.sa-band .region-box { fill: none; stroke: var(--node-line); stroke-width: 1.6; }
+.it-region.sa-d1 .region-box { stroke: var(--c-indigo); } .it-region.sa-d2 .region-box { stroke: var(--c-violet); } .it-region.sa-d3 .region-box { stroke: var(--c-teal); }
+.it-region.sa-d4 .region-box { stroke: var(--c-amber); } .it-region.sa-d5 .region-box { stroke: var(--c-rose); }
+.it-region.sa-band.sa-active .region-box { stroke-width: 3; fill: var(--hot-soft); fill-opacity: 0.5; }
+.it-region.sa-tmp .region-box { fill: var(--part-b-soft); stroke: var(--part-b); stroke-width: 1.6; stroke-dasharray: 6 4; }
+.it-region.sa-group .region-box { fill: none; stroke-width: 2; stroke-dasharray: 4 4; }
+
+.it-cell.sa-lifted .cell-box { fill: var(--part-a-soft); stroke: var(--c-green); stroke-width: 3; filter: drop-shadow(0 8px 10px rgba(0, 0, 0, 0.3)); }
+.it-cell.sa-hole .cell-box { fill: none; stroke: var(--c-green); stroke-width: 2; stroke-dasharray: 5 4; }
+.it-cell.sa-hole .cell-text { fill: var(--muted); opacity: 0.45; }
+.it-cell.sa-run .cell-box { fill: var(--part-a-soft); stroke: var(--part-a); }
+.it-cell.sa-run.focus .cell-box { stroke: var(--hot); stroke-width: 3; }
+.it-cell.sa-run.hot .cell-box { fill: var(--hot-soft); stroke: var(--hot); }
+.it-cell.sa-half-l .cell-box { fill: color-mix(in srgb, var(--c-teal) 20%, var(--node)); stroke: var(--c-teal); stroke-width: 2.2; }
+.it-cell.sa-half-r .cell-box { fill: color-mix(in srgb, var(--c-amber) 20%, var(--node)); stroke: var(--c-amber); stroke-width: 2.2; }
+.it-cell.sa-stale .cell-box { fill: none; stroke: var(--node-line); stroke-dasharray: 4 4; }
+.it-cell.sa-stale .cell-text { fill: var(--muted); opacity: 0.4; }
