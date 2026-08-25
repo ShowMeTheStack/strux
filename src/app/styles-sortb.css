@@ -1,0 +1,60 @@
+/* sorting, part B: Hoare and three-way quick sort, heap, counting, radix and bucket sort */
+:root {
+  --sb-less: #0284c7; --sb-less-soft: #e0f2fe;
+  --sb-eq: #d97706; --sb-eq-soft: #fff3d6;
+  --sb-more: #7c3aed; --sb-more-soft: #f1eafe;
+  --sb-unk: #94a3b8;
+}
+:root[data-theme="dark"] {
+  --sb-less: #38bdf8; --sb-less-soft: #0f3047;
+  --sb-eq: #fbbf24; --sb-eq-soft: #3d3216;
+  --sb-more: #a78bfa; --sb-more-soft: #2c2350;
+  --sb-unk: #64748b;
+}
+.it-line.sb-call .plain-line { stroke: var(--node-line); stroke-width: 3; stroke-linecap: round; }
+.it-line.sb-call.top .plain-line { stroke: var(--accent); stroke-width: 4; }
+.it-text.sb-calltext .free-text { font: 600 11px var(--mono); fill: var(--muted); }
+.it-text.sb-calltext.top .free-text { fill: var(--accent); }
+.it-line.sb-split .plain-line { stroke: var(--c-rose); stroke-width: 3; stroke-dasharray: 2 5; stroke-linecap: round; }
+.it-text.sb-splittext .free-text { font: 700 12px var(--font); fill: var(--c-rose); }
+
+/* three-way partition: less, equal, greater and not yet seen */
+.it-bar.sb-less .bar-box { fill: var(--sb-less); opacity: 1; }
+.it-bar.sb-eq .bar-box { fill: var(--sb-eq); opacity: 1; }
+.it-bar.sb-more .bar-box { fill: var(--sb-more); opacity: 1; }
+.it-bar.sb-unk .bar-box { fill: var(--sb-unk); opacity: 0.7; }
+.it-region.sb-less .region-box { fill: var(--sb-less-soft); } .it-region.sb-eq .region-box { fill: var(--sb-eq-soft); } .it-region.sb-more .region-box { fill: var(--sb-more-soft); }
+.it-region.sb-less .region-box, .it-region.sb-eq .region-box, .it-region.sb-more .region-box { opacity: 0.85; }
+.it-text.sb-flag .free-text { font: 700 12px var(--font); }
+.it-text.sb-flag.sb-less .free-text { fill: var(--sb-less); } .it-text.sb-flag.sb-eq .free-text { fill: var(--sb-eq); } .it-text.sb-flag.sb-more .free-text { fill: var(--sb-more); }
+
+/* heap sort: tree edges and the heap boundary */
+.it-line.sb-edge .plain-line { stroke: var(--node-line); stroke-width: 2; }
+.it-line.sb-edge.hot .plain-line { stroke: var(--hot); stroke-width: 4; stroke-dasharray: none; }
+.it-line.sb-edge.gone .plain-line { stroke-dasharray: 3 6; opacity: 0.45; }
+.it-line.sb-wall .plain-line { stroke: var(--c-rose); stroke-width: 3; }
+.it-vertex.sb-out .vertex-circle { fill: var(--part-a-soft); stroke: var(--part-a); stroke-dasharray: 4 3; }
+.it-vertex.sb-out .vertex-text { fill: var(--part-a); }
+
+/* counting, radix and bucket sort */
+.it-text.sb-digit .free-text { font: 600 17px var(--mono); fill: var(--node-text); }
+.it-text.sb-digit.lead .free-text { fill: var(--muted); opacity: 0.45; }
+.it-text.sb-digit.cur .free-text { fill: var(--hot); font-weight: 800; }
+.it-text.sb-mark .free-text { font: 700 10px var(--mono); fill: var(--muted); }
+.it-text.sb-label .free-text { font: 700 15px var(--mono); fill: var(--muted); }
+.it-text.sb-label.hot .free-text { fill: var(--hot); }
+.it-region.sb-bin .region-box { fill: var(--surface2); stroke: var(--node-line); stroke-width: 1.5; }
+.it-region.sb-bin.hot .region-box { fill: var(--hot-soft); stroke: var(--hot); stroke-width: 2.5; }
+.it-region.sb-band .region-box { fill: var(--part-a-soft); stroke: var(--part-a); stroke-width: 1.5; }
+.it-region.sb-band.hot .region-box { fill: var(--hot-soft); stroke: var(--hot); }
+.it-cell.ghost .cell-box { stroke-dasharray: 4 4; }
+.it-token.sb-tally .token-dot { fill: var(--part-b); stroke: none; }
+.it-token.sb-tally.hot .token-dot { fill: var(--hot); }
+.it-region.sb-a .region-box { fill: var(--part-a-soft); opacity: 0.85; } .it-region.sb-b .region-box { fill: var(--part-b-soft); opacity: 0.85; }
+.it-region.sb-frame .region-box { fill: none; stroke: var(--node-line); stroke-width: 1.5; stroke-dasharray: 5 5; }
+.it-line.sb-water .plain-line { stroke: var(--hot); stroke-width: 3; stroke-dasharray: 8 5; }
+.it-text.sb-water .free-text { fill: var(--hot); font-weight: 700; }
+.it-text.sb-title .free-text { font: 700 14px var(--mono); fill: var(--muted); }
+.it-text.sb-hot .free-text { fill: var(--hot); font-weight: 700; }
+.it-text.sb-good .free-text { fill: var(--good); font-weight: 700; }
+.it-line.sb-hot .plain-line { stroke: var(--hot); stroke-width: 3; }
