@@ -1,0 +1,18 @@
+/* Hashing topics: open addressing slots, tombstones, probe arcs */
+.it-cell.oa-tomb .cell-box { fill: var(--freed); stroke: var(--bad); stroke-width: 1.8; stroke-dasharray: 5 4; }
+.it-cell.oa-tomb .cell-text { fill: var(--bad); font-size: 12px; letter-spacing: 0.04em; }
+.it-cell.oa-seen .cell-box { stroke: var(--hot); stroke-width: 2; stroke-dasharray: 4 3; }
+.it-cell.oa-wrong .cell-box { stroke: var(--bad); stroke-width: 3; }
+.it-region.oa-run .region-box { fill: var(--hot-soft); stroke: var(--hot); stroke-width: 1; }
+.it-region.oa-run .region-text { fill: var(--hot); }
+.free-text.oa-hop { font: 700 12px var(--mono); fill: var(--hot); }
+.free-text.oa-hop-old { font: 600 11px var(--mono); fill: var(--muted); }
+.free-text.oa-formula { font: 600 15px var(--mono); fill: var(--text); }
+.free-text.oa-formula.hot { fill: var(--hot); }
+.free-text.oa-seq { font: 600 14px var(--mono); fill: var(--muted); }
+.free-text.oa-verdict { font: 700 14px var(--font); fill: var(--text); }
+.free-text.oa-verdict.good { fill: var(--good); }
+.free-text.oa-verdict.bad { fill: var(--bad); }
+.free-text.oa-verdict.warn { fill: var(--warn); }
+.it-token.oa-key .token-dot { fill: var(--c-rose); }
+.it-token.oa-key .token-text { font-size: 13px; }
