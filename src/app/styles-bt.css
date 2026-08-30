@@ -1,0 +1,56 @@
+/* Binary tree traversals (bt): the Euler-tour walk and its trail, visit spots and order badges, empty-child
+   spots, stack cards, call frames, levels in colour, Morris threads, index arcs of the array form. */
+.it-line.bt-tour .plain-line { stroke: var(--c-teal); stroke-width: 2.4; stroke-dasharray: 2 5; stroke-linecap: round; opacity: 0.75; }
+.it-line.bt-floor .plain-line { stroke: var(--muted); stroke-width: 2.5; }
+.it-line.bt-link .plain-line { stroke: var(--hot); stroke-width: 2; stroke-dasharray: 4 4; }
+.it-token.bt-walker .token-dot { fill: var(--c-teal); stroke: var(--st-bg); stroke-width: 2.5; }
+.it-ring.bt-spot .ring-circle { stroke: var(--hot); stroke-width: 2; stroke-dasharray: 3 3; }
+.it-vertex.bt-badge .vertex-circle { fill: var(--part-a); stroke: var(--part-a); filter: none; }
+.it-vertex.bt-badge .vertex-text { font: 700 12px var(--font); fill: #fff; transform: translateY(-2px); }
+:root[data-theme="dark"] .it-vertex.bt-badge .vertex-text { fill: #0f1220; }
+.it-ring.bt-null .ring-circle { stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 2 3; opacity: 0.7; }
+.it-ring.bt-null-on .ring-circle { stroke: var(--bad); stroke-width: 2.5; stroke-dasharray: none; opacity: 1; fill: color-mix(in srgb, var(--bad) 15%, transparent); }
+.it-text.bt-nulltext .free-text { font: 700 11px var(--mono); fill: var(--bad); }
+.it-text.bt-label .free-text { font: 700 12px var(--font); fill: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.it-text.bt-muted .free-text { font: 500 13px var(--font); fill: var(--muted); font-style: italic; }
+.it-text.bt-note .free-text { font: 600 14px var(--font); fill: var(--text); }
+.it-text.bt-hot .free-text { font: 700 14px var(--font); fill: var(--hot); }
+.it-text.bt-formula .free-text { font: 700 14px var(--mono); fill: var(--hot); }
+.it-text.bt-idx .free-text { font: 600 12px var(--mono); fill: var(--part-b); }
+.it-region.bt-slot .region-box { fill: none; stroke: var(--node-line); stroke-width: 1.4; stroke-dasharray: 4 4; }
+.it-region.bt-band .region-box { fill: var(--surface2); opacity: 0.6; }
+.it-region.bt-panel .region-box { fill: none; stroke: var(--border); stroke-width: 1.5; }
+.it-cell.bt-out .cell-box { fill: var(--part-a-soft); stroke: var(--part-a); stroke-width: 2; }
+.it-cell.bt-card .cell-box { stroke-width: 2; }
+.it-cell.bt-gone .cell-box { stroke-dasharray: 4 4; opacity: 0.55; } .it-cell.bt-gone .cell-text { fill: var(--muted); }
+.it-cell.bt-empty .cell-text { fill: var(--muted); font-size: 13px; }
+.it-vertex.bt-onstack .vertex-circle { stroke: var(--part-b); stroke-width: 4; }
+.it-vertex.bt-waiting .vertex-circle { stroke: var(--part-b); stroke-width: 3; stroke-dasharray: 5 3; }
+.it-vertex.bt-kid .vertex-circle { stroke: var(--part-a); stroke-width: 3; stroke-dasharray: 4 3; }
+.it-vertex.bt-later .vertex-circle { stroke: var(--c-rose); stroke-width: 3; stroke-dasharray: 4 3; }
+.it-node.bt-frame .node-box { fill: var(--surface2); stroke: var(--node-line); }
+.it-node.bt-frame .node-text { font: 650 15px var(--font); }
+.it-node.bt-frame .node-text.link { font: 600 11px var(--mono); fill: var(--muted); }
+.it-node.bt-frame-top .node-box { stroke: var(--hot); stroke-width: 2.6; fill: var(--hot-soft); }
+.it-node.bt-frame-top .node-text.link { fill: var(--text); }
+.it-node.bt-frame-null .node-text { fill: var(--bad); font: 700 13px var(--mono); }
+/* levels: one colour per depth */
+.it-vertex.bt-lv0 .vertex-circle, .it-cell.bt-lv0 .cell-box { stroke: var(--c-teal); fill: color-mix(in srgb, var(--c-teal) 22%, var(--node)); stroke-width: 2.6; }
+.it-vertex.bt-lv1 .vertex-circle, .it-cell.bt-lv1 .cell-box { stroke: var(--c-amber); fill: color-mix(in srgb, var(--c-amber) 22%, var(--node)); stroke-width: 2.6; }
+.it-vertex.bt-lv2 .vertex-circle, .it-cell.bt-lv2 .cell-box { stroke: var(--c-violet); fill: color-mix(in srgb, var(--c-violet) 22%, var(--node)); stroke-width: 2.6; }
+.it-vertex.bt-lv3 .vertex-circle, .it-cell.bt-lv3 .cell-box { stroke: var(--c-rose); fill: color-mix(in srgb, var(--c-rose) 22%, var(--node)); stroke-width: 2.6; }
+.it-region.bt-lv0 .region-box { fill: color-mix(in srgb, var(--c-teal) 9%, transparent); }
+.it-region.bt-lv1 .region-box { fill: color-mix(in srgb, var(--c-amber) 9%, transparent); }
+.it-region.bt-lv2 .region-box { fill: color-mix(in srgb, var(--c-violet) 9%, transparent); }
+.it-region.bt-lv3 .region-box { fill: color-mix(in srgb, var(--c-rose) 9%, transparent); }
+.it-vertex.focus.bt-lv0 .vertex-circle, .it-vertex.focus.bt-lv1 .vertex-circle, .it-vertex.focus.bt-lv2 .vertex-circle, .it-vertex.focus.bt-lv3 .vertex-circle { stroke: var(--hot); stroke-width: 4; }
+/* Morris threads */
+.it-arrow.bt-thread .arrow-path { stroke: var(--c-violet); stroke-width: 2.6; stroke-dasharray: 8 5; }
+.it-arrow.bt-thread.hot .arrow-path { stroke: var(--hot); stroke-width: 3.2; }
+.it-arrow.bt-follow .arrow-path { stroke: var(--hot); stroke-width: 3.6; }
+/* array form: index arcs */
+.it-arrow.bt-arc .arrow-path { stroke: var(--part-b); stroke-width: 2.2; }
+.it-arrow.bt-arc.hot .arrow-path { stroke: var(--hot); stroke-width: 3; }
+.it-arrow.bt-arc .arrow-label { font: 700 12px var(--mono); fill: var(--part-b); }
+.it-arrow.bt-arc.hot .arrow-label { fill: var(--hot); }
+.it-arrow.bt-thread.bad .arrow-path { stroke: var(--bad); }
