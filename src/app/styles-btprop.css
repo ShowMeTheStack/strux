@@ -1,0 +1,53 @@
+/* Tree properties and construction (btprop): the call stack beside the tree, empty-subtree spots,
+   subtree boxes, balance beams, strips of traversal values. Item classes sit on the item's group. */
+.it-node.bp-frame .node-box { fill: var(--surface2); stroke: var(--node-line); }
+.it-node.bp-frame .node-text { font: 600 14px var(--mono); }
+.it-node.bp-frame .node-text.link { font: 600 13px var(--mono); fill: var(--text); }
+.it-node.bp-top .node-box { stroke: var(--hot); stroke-width: 2.6; fill: var(--hot-soft); }
+.it-node.bp-frame.bp-bad .node-box { stroke: var(--bad); stroke-width: 2.6; }
+.it-node.bp-frame.bp-good .node-box { stroke: var(--good); stroke-width: 2.6; }
+.it-node.bp-box .node-text { font: 700 18px var(--font); }
+.it-ring.bp-null .ring-circle { stroke: var(--muted); stroke-width: 2; stroke-dasharray: 3 4; }
+.it-ring.bp-null.hot .ring-circle { stroke: var(--hot); stroke-width: 2.6; }
+.it-ring.bp-null.bad .ring-circle { stroke: var(--bad); stroke-width: 2.6; }
+.it-ring.bp-halo .ring-circle { stroke: var(--good); stroke-width: 3.5; stroke-dasharray: none; }
+.it-ring.bp-halo-bad .ring-circle { stroke: var(--bad); stroke-width: 3.5; stroke-dasharray: none; }
+.it-vertex.bp-lab .vertex-sub { font-size: 13.5px; font-weight: 700; }
+.it-vertex.bp-dim > * { opacity: 0.35; }
+.it-vertex.bp-x .vertex-circle { stroke: var(--c-rose); stroke-width: 3.5; fill: color-mix(in srgb, var(--c-rose) 22%, var(--node)); }
+.it-vertex.bp-y .vertex-circle { stroke: var(--c-teal); stroke-width: 3.5; fill: color-mix(in srgb, var(--c-teal) 22%, var(--node)); }
+.it-vertex.bp-leaf .vertex-circle { fill: var(--good); stroke: var(--good); }
+.it-vertex.bp-leaf .vertex-text { fill: #fff; }
+.it-vertex.bp-good .vertex-circle { stroke: var(--good); stroke-width: 3.5; fill: color-mix(in srgb, var(--good) 20%, var(--node)); }
+.it-vertex.bp-bad .vertex-circle { stroke: var(--bad); stroke-width: 3.5; fill: color-mix(in srgb, var(--bad) 22%, var(--node)); }
+.it-vertex.part-a .vertex-sub, .it-vertex.done .vertex-sub, .it-vertex.bp-good .vertex-sub { fill: var(--part-a); font-weight: 700; }
+.it-vertex.bp-bad .vertex-sub { fill: var(--bad); font-weight: 700; }
+.it-region.bp-sub .region-box { fill: color-mix(in srgb, var(--part-b) 14%, transparent); stroke: var(--part-b); stroke-width: 2.2; stroke-dasharray: 7 4; }
+.it-region.bp-sub-done .region-box { fill: color-mix(in srgb, var(--part-a) 14%, transparent); stroke: var(--part-a); stroke-width: 2.2; }
+.it-region.bp-zone-a .region-box { fill: color-mix(in srgb, var(--part-a) 18%, transparent); stroke: var(--part-a); stroke-width: 2; }
+.it-region.bp-zone-b .region-box { fill: color-mix(in srgb, var(--part-b) 18%, transparent); stroke: var(--part-b); stroke-width: 2; }
+.it-region.bp-zone-x .region-box { fill: none; stroke: var(--hot); stroke-width: 2.4; }
+.it-region.bp-tray .region-box { fill: var(--surface2); stroke: var(--border); stroke-width: 1.5; }
+.it-cell.bp-used > * { opacity: 0.32; }
+.it-cell.bp-nullv .cell-text { fill: var(--muted); }
+.it-cell.bp-root .cell-box { fill: var(--c-rose); stroke: var(--c-rose); } .it-cell.bp-root .cell-text { fill: #fff; }
+.it-cell.bp-next .cell-box { stroke: var(--hot); stroke-width: 3; }
+.it-cell.bp-good .cell-box { fill: color-mix(in srgb, var(--good) 22%, var(--node)); stroke: var(--good); }
+.it-cell.bp-bad .cell-box { fill: color-mix(in srgb, var(--bad) 22%, var(--node)); stroke: var(--bad); }
+.it-line.bp-beam .plain-line { stroke: var(--text); stroke-width: 5; stroke-linecap: round; }
+.it-line.bp-beam.bp-red .plain-line { stroke: var(--bad); }
+.it-line.bp-beam.bp-green .plain-line { stroke: var(--good); }
+.it-line.bp-link .plain-line { stroke: var(--hot); stroke-width: 2.5; stroke-dasharray: 5 4; }
+.it-line.bp-link.bp-red .plain-line { stroke: var(--bad); stroke-width: 3; }
+.it-line.bp-link.bp-green .plain-line { stroke: var(--good); }
+.it-line.bp-glow .plain-line { stroke-width: 12; stroke-linecap: round; opacity: 0.42; stroke-dasharray: none; }
+.it-line.bp-glow.bp-green .plain-line { stroke: var(--good); } .it-line.bp-glow.bp-amber .plain-line { stroke: var(--hot); } .it-line.bp-glow.bp-red .plain-line { stroke: var(--bad); }
+.it-line.bp-glow.bp-x .plain-line { stroke: var(--c-rose); } .it-line.bp-glow.bp-y .plain-line { stroke: var(--c-teal); }
+.it-line.bp-dashed .plain-line { stroke-dasharray: 4 4; }
+.it-text.bp-title .free-text { font: 700 13px var(--font); fill: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.it-text.bp-hot .free-text { fill: var(--hot); font-weight: 700; }
+.it-text.bp-good .free-text { fill: var(--good); font-weight: 700; }
+.it-text.bp-bad .free-text { fill: var(--bad); font-weight: 700; }
+.it-text.bp-nullmark .free-text { font: 700 12px var(--mono); fill: var(--muted); }
+.it-text.bp-big .free-text { font-size: 17px; }
+.it-token.bp-gray .token-dot { fill: var(--c-gray); } .it-token.bp-red .token-dot { fill: var(--bad); } .it-token.bp-wide .token-text { font-size: 10px; }
