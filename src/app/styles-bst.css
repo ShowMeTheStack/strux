@@ -1,0 +1,45 @@
+/* Binary search tree topics (kit-bst.js, topics/bst-2..4.js). Colours come from the theme variables,
+   so light and dark both work. */
+.it-text.bx-hot .free-text { fill: var(--hot); font-weight: 700; }
+.it-text.bx-good .free-text { fill: var(--good); font-weight: 700; }
+.it-text.bx-bad .free-text { fill: var(--bad); font-weight: 700; }
+.it-text.bx-a .free-text { fill: var(--part-a); font-weight: 650; }
+.it-text.bx-b .free-text { fill: var(--part-b); font-weight: 650; }
+.it-text.bx-code .free-text { font: 600 13px var(--mono); fill: var(--text); }
+.it-text.bx-code.bx-hot .free-text { fill: var(--hot); }
+.it-text.bx-code.bx-good .free-text { fill: var(--good); }
+.it-text.bx-code.bx-bad .free-text { fill: var(--bad); }
+.it-text.bx-code.bx-muted .free-text { fill: var(--muted); }
+.it-text.bx-big .free-text { font-size: 18px; font-weight: 700; fill: var(--text); }
+
+.it-region.bx-sub .region-box { fill: var(--part-b-soft); stroke: var(--part-b); stroke-width: 1.2; stroke-dasharray: 5 4; opacity: 0.55; }
+.it-region.bx-sub .region-text { fill: var(--part-b); }
+.it-region.bx-cut .region-box { fill: none; stroke: var(--node-line); stroke-width: 1.4; stroke-dasharray: 4 5; }
+.it-region.bx-cut .region-text { fill: var(--muted); }
+.it-region.bx-band .region-box { fill: var(--part-a-soft); stroke: var(--part-a); stroke-width: 1.2; stroke-dasharray: 6 4; opacity: 0.6; }
+.it-region.bx-band .region-text { fill: var(--part-a); }
+.it-region.bx-arr .region-box { fill: var(--hot-soft); stroke: var(--hot); stroke-width: 1.5; opacity: 0.55; }
+.it-region.bx-frame .region-box { fill: var(--surface2); stroke: var(--border); stroke-width: 1.2; }
+.it-region.bx-frame.bx-top .region-box { stroke: var(--hot); stroke-width: 2; }
+.it-region.bx-frame.bx-done .region-box { stroke: var(--part-a); }
+
+.it-ring.bx-null .ring-circle { stroke: var(--muted); stroke-width: 1.6; stroke-dasharray: 3 4; }
+.it-ring.bx-cand .ring-circle { stroke: var(--c-violet); stroke-width: 3; stroke-dasharray: 6 4; }
+.it-ring.bx-cand2 .ring-circle { stroke: var(--c-teal); stroke-width: 3; stroke-dasharray: 6 4; }
+.it-ring.bx-bad .ring-circle { stroke: var(--bad); stroke-width: 3; stroke-dasharray: none; }
+
+.it-vertex.bx-cand .vertex-circle { stroke: var(--c-violet); stroke-width: 3; }
+.it-vertex.bx-out .vertex-circle { stroke: var(--bad); stroke-width: 3; fill: var(--freed); }
+.it-vertex.bx-sub-hot .vertex-sub { fill: var(--hot); font-weight: 700; }
+.it-vertex.bx-sub-bad .vertex-sub { fill: var(--bad); font-weight: 700; }
+.it-vertex.bx-sub-good .vertex-sub { fill: var(--good); font-weight: 700; }
+
+.it-arrow.bx-left .arrow-path { stroke: var(--c-violet); stroke-width: 3; }
+.it-arrow.bx-right .arrow-path { stroke: var(--c-teal); stroke-width: 3; }
+.it-arrow.bx-fly .arrow-path { stroke: var(--hot); stroke-width: 2.4; stroke-dasharray: 6 5; }
+.it-arrow.bx-fly .arrow-label { fill: var(--hot); font-weight: 700; }
+
+.it-cell.bx-x .cell-box { fill: none; stroke: var(--hot); stroke-width: 2; stroke-dasharray: 4 3; }
+.it-cell.bx-x .cell-text { fill: var(--hot); }
+.it-cell.bx-dim .cell-box { opacity: 0.45; } .it-cell.bx-dim .cell-text { opacity: 0.45; }
+.it-text.bx-title .free-text { font: 700 12px var(--font); fill: var(--muted); letter-spacing: 0.06em; }
