@@ -1,0 +1,45 @@
+/* Balanced trees (AVL and red-black): balance badges, rotation marks, colours, the double black. */
+.it-token.bal-b0 .token-dot { fill: var(--c-gray); }
+.it-token.bal-b1 .token-dot { fill: var(--c-teal); }
+.it-token.bal-b2 .token-dot { fill: var(--bad); }
+.it-token.bal-b0 .token-text, .it-token.bal-b1 .token-text, .it-token.bal-b2 .token-text { font-size: 11px; }
+.it-token.flash .token-dot { animation: bal-pulse 0.9s ease-out 2; }
+@keyframes bal-pulse { 0% { stroke-width: 8; stroke: var(--bad); } 100% { stroke-width: 2; } }
+.it-vertex.bal-hnew .vertex-sub { fill: var(--hot); font-weight: 800; }
+.it-vertex.bal-x .vertex-circle { stroke: var(--c-teal); stroke-width: 3.5; }
+.it-vertex.bal-y .vertex-circle { stroke: var(--c-amber); stroke-width: 3.5; }
+.it-vertex.bal-victim .vertex-circle { stroke: var(--bad); stroke-width: 3; stroke-dasharray: 5 3; }
+.it-vertex.bal-freed .vertex-circle { fill: var(--freed); stroke: var(--bad); stroke-dasharray: 5 4; }
+.it-region.bal-zone .region-box { fill: var(--part-b-soft); stroke: var(--part-b); stroke-width: 1.5; stroke-dasharray: 6 4; opacity: 0.9; }
+.it-region.bal-zone .region-text { fill: var(--part-b); font-size: 13px; font-weight: 800; }
+.it-region.bal-path .region-box { fill: var(--hot-soft); stroke: none; opacity: 0.7; }
+.it-ring.bal-alarm .ring-circle { stroke: var(--bad); stroke-width: 3; stroke-dasharray: none; animation: bal-ring 1.2s ease-in-out infinite; }
+@keyframes bal-ring { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+.it-ring.bal-uncle .ring-circle { stroke: var(--c-teal); stroke-width: 3; stroke-dasharray: 5 4; }
+.it-ring.bal-sib .ring-circle { stroke: var(--c-violet); stroke-width: 3; stroke-dasharray: 5 4; }
+.it-ring.bal-db .ring-circle { stroke: var(--text); stroke-width: 4; stroke-dasharray: none; }
+.it-arrow.bal-mark .arrow-path { stroke: var(--hot); stroke-width: 3.2; }
+.it-arrow.bal-mark .arrow-label, .it-arrow.bal-stale .arrow-label, .it-arrow.bal-pending .arrow-label { fill: var(--hot); font-size: 14px; font-weight: 800; }
+.it-arrow.bal-stale .arrow-path { stroke: var(--hot); stroke-width: 2.4; stroke-dasharray: 7 5; }
+.it-arrow.bal-pending .arrow-path { stroke-dasharray: 7 5; }
+.it-arrow.bal-trail .arrow-path { stroke: var(--muted); stroke-width: 1.6; stroke-dasharray: 3 5; }
+.it-arrow.bal-trail .arrow-label { font-style: italic; }
+.it-arrow.bal-parent .arrow-path { stroke: var(--c-gray); stroke-width: 1.4; stroke-dasharray: 3 3; opacity: 0.85; }
+.it-arrow.bal-parent.hot .arrow-path { stroke: var(--hot); stroke-width: 2.4; opacity: 1; }
+.it-arrow.bal-parent .arrow-label { fill: var(--hot); font-size: 13px; font-weight: 800; }
+.it-arrow.bal-redred .arrow-path { stroke: var(--bad); stroke-width: 3.4; }
+.it-arrow.bal-redred .arrow-label { fill: var(--bad); font-size: 13px; font-weight: 800; }
+.free-text.bal-banner { font: 750 16px var(--font); fill: var(--text); }
+.free-text.bal-case { font: 750 15px var(--font); fill: var(--hot); }
+.free-text.bal-note { font: 600 13px var(--font); fill: var(--muted); }
+/* red-black colours: black nodes need a light rim on the dark stage */
+.it-vertex.black .vertex-circle { fill: #1f2937; stroke: #000; }
+:root[data-theme="dark"] .it-vertex.black .vertex-circle { fill: #070910; stroke: #9aa3c4; }
+.it-vertex.red .vertex-circle { fill: #e11d48; stroke: #9f1239; }
+:root[data-theme="dark"] .it-vertex.red .vertex-circle { fill: #e11d48; stroke: #fda4af; }
+.it-vertex.red.focus .vertex-circle, .it-vertex.black.focus .vertex-circle { stroke: var(--hot); stroke-width: 4; }
+.it-vertex.bal-recolor .vertex-circle { animation: bal-recolor 0.9s ease-out; }
+@keyframes bal-recolor { 0% { stroke: var(--hot); stroke-width: 9; } 100% { } }
+.it-node.bal-nil .node-box { fill: #1f2937; stroke: #000; }
+:root[data-theme="dark"] .it-node.bal-nil .node-box { fill: #070910; stroke: #9aa3c4; }
+.it-node.bal-nil .node-text { fill: #fff; font: 700 10px var(--mono); }
