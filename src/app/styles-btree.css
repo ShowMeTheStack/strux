@@ -1,0 +1,68 @@
+/* B-trees, B+ trees, splay trees and treaps (prefix mw-) */
+.it-region.mw-frame .region-box { fill: var(--node); stroke: var(--node-line); stroke-width: 1.6; rx: 9px; filter: drop-shadow(0 2px 3px rgba(20, 24, 50, 0.08)); }
+.it-region.mw-frame.mw-leaf .region-box { fill: var(--surface2); }
+.it-region.mw-frame.mw-path .region-box { stroke: var(--part-a); stroke-width: 2.6; }
+.it-region.mw-frame.mw-focus .region-box { stroke: var(--hot); stroke-width: 3.4; }
+.it-region.mw-frame.mw-full .region-box { stroke: var(--bad); stroke-width: 3; stroke-dasharray: 7 4; }
+.it-region.mw-frame.mw-newbie .region-box { stroke: var(--part-b); stroke-width: 2.8; }
+.it-region.mw-frame.mw-thin .region-box { stroke: var(--c-amber); stroke-width: 3; stroke-dasharray: 7 4; }
+.it-region.mw-frame.mw-sibling .region-box { stroke: var(--c-violet); stroke-width: 2.8; stroke-dasharray: 6 4; }
+.it-region.mw-frame.mw-freed .region-box { fill: var(--freed); stroke: var(--bad); stroke-dasharray: 5 4; }
+.it-region.mw-frame.mw-faded .region-box { opacity: 0.4; }
+.it-region.mw-slot .region-box { fill: none; stroke: var(--node-line); stroke-width: 1; stroke-dasharray: 3 3; rx: 4px; }
+.it-region.mw-slot.mw-used .region-box { stroke: none; }
+.it-region.mw-slot.mw-over .region-box { stroke: var(--bad); stroke-width: 1.5; }
+.it-region.mw-ptr .region-box { fill: var(--link-cell); stroke: var(--node-line); stroke-width: 0.8; rx: 3px; }
+.it-region.mw-ptr.mw-on .region-box { fill: var(--arrow); stroke: none; }
+.it-region.mw-ptr.mw-leafp .region-box { fill: none; stroke: none; }
+.it-region.mw-ptr.mw-hot .region-box { fill: var(--hot); }
+.it-region.mw-band .region-box { fill: var(--part-a-soft); stroke: var(--part-a); stroke-width: 1.2; stroke-dasharray: 5 4; }
+.it-region.mw-tray .region-box { fill: var(--surface); stroke: var(--border); stroke-width: 1.4; }
+.it-region.mw-case .region-box { fill: var(--hot-soft); stroke: var(--hot); stroke-width: 1.4; }
+.it-region.mw-case .region-text { fill: var(--text); font-size: 13px; }
+
+.it-cell.mw-key .cell-box { fill: var(--node); stroke: var(--node-line); stroke-width: 1.3; rx: 5px; }
+.it-cell.mw-key .cell-text { font-size: 15px; }
+.it-cell.mw-key.mw-inner .cell-box { fill: var(--part-b-soft); stroke: var(--part-b); }
+.it-cell.mw-key.mw-hot .cell-box { fill: var(--hot-soft); stroke: var(--hot); stroke-width: 2.6; }
+.it-cell.mw-key.mw-good .cell-box { fill: var(--part-a); stroke: var(--part-a); }
+.it-cell.mw-key.mw-good .cell-text { fill: #fff; }
+.it-cell.mw-key.mw-out .cell-box { fill: var(--part-a-soft); stroke: var(--part-a); stroke-width: 2.2; }
+.it-cell.mw-key.mw-carry .cell-box { fill: var(--c-rose); stroke: var(--c-rose); }
+.it-cell.mw-key.mw-carry .cell-text { fill: #fff; }
+.it-cell.mw-key.mw-rise .cell-box { fill: var(--c-amber); stroke: var(--c-amber); }
+.it-cell.mw-key.mw-rise .cell-text { fill: #fff; }
+.it-cell.mw-key.mw-doomed .cell-box { stroke: var(--bad); stroke-width: 2.6; stroke-dasharray: 4 3; }
+.it-cell.mw-key.mw-doomed .cell-text { fill: var(--bad); }
+.it-cell.mw-key.mw-stale .cell-box { fill: none; stroke: var(--node-line); stroke-dasharray: 3 3; }
+.it-cell.mw-key.mw-stale .cell-text { fill: var(--muted); opacity: 0.6; }
+.it-cell.mw-key.mw-faded > * { opacity: 0.35; }
+:root[data-theme="dark"] .it-cell.mw-key.mw-good .cell-text, :root[data-theme="dark"] .it-cell.mw-key.mw-carry .cell-text, :root[data-theme="dark"] .it-cell.mw-key.mw-rise .cell-text { fill: #0f1220; }
+
+.it-arrow.mw-edge .arrow-path { stroke-width: 1.8; }
+.it-arrow.mw-edge.mw-path .arrow-path { stroke: var(--part-a); stroke-width: 3; }
+.it-arrow.mw-edge.mw-faded > * { opacity: 0.35; }
+.it-arrow.mw-next .arrow-path { stroke: var(--c-teal); stroke-width: 2; }
+.it-arrow.mw-next.mw-hot .arrow-path { stroke: var(--hot); stroke-width: 3.4; }
+.it-arrow.mw-next.mw-walked .arrow-path { stroke: var(--part-a); stroke-width: 3; }
+
+.free-text.mw-tag { font: 700 15px var(--font); fill: var(--hot); }
+.free-text.mw-note { font: 600 13px var(--font); fill: var(--text); }
+.free-text.mw-depth { font: 600 12px var(--mono); fill: var(--part-a); }
+.free-text.mw-out { font: 700 15px var(--mono); fill: var(--part-a); }
+
+/* splay trees and treaps: circles from the tree kit */
+.it-arrow.tree-edge.mw-bad .arrow-path { stroke: var(--bad); stroke-width: 3; stroke-dasharray: 6 4; }
+.it-arrow.tree-edge.mw-path .arrow-path { stroke: var(--part-a); stroke-width: 2.8; }
+.it-vertex.mw-x .vertex-circle { fill: var(--c-teal); stroke: var(--c-teal); }
+.it-vertex.mw-x .vertex-text { fill: #fff; }
+.it-vertex.mw-p .vertex-circle { stroke: var(--c-violet); stroke-width: 3; }
+.it-vertex.mw-g .vertex-circle { stroke: var(--c-amber); stroke-width: 3; }
+.it-vertex.mw-sink .vertex-circle { fill: var(--c-rose); stroke: var(--c-rose); }
+.it-vertex.mw-sink .vertex-text { fill: #fff; }
+.it-vertex.mw-faded > * { opacity: 0.4; }
+:root[data-theme="dark"] .it-vertex.mw-x .vertex-text, :root[data-theme="dark"] .it-vertex.mw-sink .vertex-text { fill: #0f1220; }
+.it-token.mw-pri .token-dot { fill: var(--c-amber); stroke: var(--node); stroke-width: 2; }
+.it-token.mw-pri .token-text { font: 700 10px var(--mono); fill: #fff; }
+.it-token.mw-pri.mw-badpri .token-dot { fill: var(--bad); }
+:root[data-theme="dark"] .it-token.mw-pri .token-text { fill: #0f1220; }
