@@ -30073,6 +30073,404 @@ void bucket_sort(int a[], int n)
   });
 })(SEE);
 
+// ==== topics/splay-1.js ====
+// Splay trees: the family, access (search and splay) and insert.
+(function (SEE) {
+  'use strict';
+  const X = SEE.Strux, T = X.TreeKit;
+
+  const SPLAY = `/* lift x one level: it takes its parent's place and the parent becomes its child */
+void rotate(struct node *x)
+{
+    struct node *p = x->parent;
+    struct node *g = p->parent;
+    if (p->left == x) {               /* x is a left child: rotate right */
+        p->left = x->right;
+        if (x->right != NULL)
+            x->right->parent = p;
+        x->right = p;
+    } else {                          /* x is a right child: rotate left */
+        p->right = x->left;
+        if (x->left != NULL)
+            x->left->parent = p;
+        x->left = p;
+    }
+    p->parent = x;
+    x->parent = g;
+    if (g == NULL)
+        root = x;
+    else if (g->left == p)
+        g->left = x;
+    else
+        g->right = x;
+}
+
+/* bring x up to the root, two levels at a time */
+void splay(struct node *x)
+{
+    struct node *p, *g;
+    while (x->parent != NULL) {                         /*@ loop */
+        p = x->parent;                                  /*@ p */
+        g = p->parent;                                  /*@ g */
+        if (g == NULL)                                  /*@ test-zig */
+            rotate(x);                                  /*@ zig */
+        else if ((g->left == p) == (p->left == x)) {    /*@ test-zigzig */
+            rotate(p);                                  /*@ zigzig-1 */
+            rotate(x);                                  /*@ zigzig-2 */
+        } else {
+            rotate(x);                                  /*@ zigzag-1 */
+            rotate(x);                                  /*@ zigzag-2 */
+        }
+    }
+}`;
+
+  X.family({
+    id: 'splay', order: 5, group: 'Balanced trees', title: 'Splay trees',
+    blurb: 'A binary search tree that moves every key it touches to the root, by rotations in pairs. Nothing is stored to keep it balanced, yet a long run of operations is fast on average.',
+    head: `#include <stdio.h>
+#include <stdlib.h>
+
+/* a binary search tree node that also knows its parent */
+struct node {
+    int key;
+    struct node *left;
+    struct node *right;
+    struct node *parent;
+};
+
+struct node *root = NULL;
+
+struct node *new_node(int key, struct node *parent)
+{
+    struct node *n = malloc(sizeof *n);
+    n->key = key;
+    n->left = NULL;
+    n->right = NULL;
+    n->parent = parent;
+    return n;
+}
+
+/* main uses this to build the tree you chose: a plain BST insert, with no splaying,
+   so the order of the keys decides the shape */
+void add(int key)
+{
+    struct node *p = NULL;
+    struct node *cur = root;
+    while (cur != NULL) {
+        p = cur;
+        cur = key < cur->key ? cur->left : cur->right;
+    }
+    if (p == NULL)
+        root = new_node(key, NULL);
+    else if (key < p->key)
+        p->left = new_node(key, p);
+    else
+        p->right = new_node(key, p);
+}`,
+  });
+
+  const keysIn = { id: 'keys', kind: 'ints', label: 'Keys, placed in this order (plain BST)', def: [50, 30, 70, 20, 40, 60, 80, 10, 25, 5], min: 0, max: 14, distinct: true, check: (v) => (v.some((x) => x < -99 || x > 999) ? 'Keys: from -99 to 999' : null) };
+  const splayMain = (inp, call) => `int main(void)
+{
+    int keys[] = { ${inp.keys.length ? inp.keys.join(', ') : '0'} };
+    int i;
+    for (i = 0; i < ${inp.keys.length}; i++)
+        add(keys[i]);
+    ${call}
+    return 0;
+}`;
+  const capture = (names) => (P) => T.capture(P, { root: 'root', cursors: names, fields: ['key'], extra: (P) => ({ fn: P.frames[0].name }) });
+  const depthMap = (d) => {
+    const by = new Map(d.nodes.map((n) => [n.addr, n]));
+    const m = new Map();
+    const go = (a, k) => { if (!a || !by.has(a) || m.has(a) || k > 40) return; m.set(a, k); const n = by.get(a); go(n.links.left, k + 1); go(n.links.right, k + 1); };
+    go(d.root, 0);
+    return m;
+  };
+  const plural = (k, w, ws) => k + ' ' + (k === 1 ? w : ws || w + 's');
+  const CASES = { zig: 'zig: the parent is the root, one rotation', 'zigzig-1': 'zig-zig: same side twice, rotate p first, then x', 'zigzig-2': 'zig-zig: same side twice, rotate p first, then x', 'zigzag-1': 'zig-zag: a bend, rotate x twice', 'zigzag-2': 'zig-zag: a bend, rotate x twice' };
+
+  /** The shared splay picture: x, p, g, the case being done, the edges a rotation changed */
+  function splayScene(ctx, opts) {
+    const d = ctx.tick.data, tag = ctx.tick.tag, memo = ctx.memo;
+    const c = d.cursors;
+    const by = new Map(d.nodes.map((n) => [n.addr, n]));
+    const inSplay = d.extra.fn === 'splay';
+    // rotate() is quiet: its line is drawn after the rotation, but splay's p and g are from before it
+    const x = inSplay ? c.x : null;
+    const p = inSplay && !/^zig/.test(tag) ? c.p : null, g = inSplay && !/^zig/.test(tag) ? c.g : null;
+    const depth = depthMap(d);
+    const pic = T.picture(ctx, d, {
+      nodeCls: (n) => (n.addr === x ? 'mw-x' : n.addr === p ? 'mw-p' : n.addr === g ? 'mw-g' : opts.nodeCls ? opts.nodeCls(n) : ''),
+      label: opts.label ? (n) => opts.label(n, depth) : null,
+      edgeCls: (n, side) => (opts.edgeCls ? opts.edgeCls(n, side) : ''),
+      showNull: false,
+    });
+    const items = pic.items.filter((it) => it.kind !== 'cursor');
+    const tag2 = (name, a, slot) => { if (a && pic.pos.has(a)) items.push({ key: 'c' + name, kind: 'cursor', at: 'n' + a, side: 'left', slot: slot || 0, text: name, cls: X.ListKit.cursorCls(name) }); };
+    if (inSplay) { tag2('x', x); tag2('p', p); tag2('g', g); }
+    for (const [name, a] of Object.entries(opts.cursors || {})) tag2(name, a);
+    // the case being done, over the tree
+    if (CASES[tag] || memo.lastCase) {
+      if (CASES[tag]) memo.lastCase = CASES[tag];
+      const xs = [...pic.pos.values()].map((q) => q.x);
+      const minX = xs.length ? Math.min(...xs) : 0;
+      if (inSplay && !['loop'].includes(tag) || CASES[tag]) items.push({ key: 'case', kind: 'text', x: minX - 30, y: -150, text: memo.lastCase, cls: 'mw-tag' });
+    }
+    return { items, pic, by, depth, x, p, g, inSplay };
+  }
+
+  /** Narration for the lines of splay() */
+  function splaySay(ctx, s) {
+    const tag = ctx.tick.tag, d = ctx.tick.data, c = d.cursors;
+    const k = (a) => (a && s.by.has(a) ? s.by.get(a).key : 'NULL');
+    const xd = s.depth.get(c.x);
+    switch (tag) {
+      case 'loop': return c.x && s.by.get(c.x) && d.root === c.x ? k(c.x) + ' has no parent: it is the root. The splay is over.' : k(c.x) + ' is at depth ' + xd + ': it still has a parent, so keep lifting it.';
+      case 'p': return 'p = ' + k(c.p) + ', the parent of x.';
+      case 'g': return c.g ? 'g = ' + k(c.g) + ', the grandparent.' : 'g = NULL: p is the root.';
+      case 'test-zig': return c.g ? 'There is a grandparent, so x can go up two levels in one step.' : 'No grandparent: a single rotation finishes the job (the zig case).';
+      case 'zig': return 'Zig: rotate(x) lifts ' + k(c.x) + ' above ' + k(c.p) + '. ' + k(c.x) + ' is now the root.';
+      case 'test-zigzig': { const by = s.by, g = by.get(c.g), p = by.get(c.p); const same = (g.links.left === c.p) === (p.links.left === c.x); return 'Is x on the same side of p as p is of g? ' + (same ? 'Yes, both ' + (p.links.left === c.x ? 'left' : 'right') + ': a straight line, the zig-zig case.' : 'No: the path bends, the zig-zag case.'); }
+      case 'zigzig-1': return 'Zig-zig, part 1: rotate(p) first. ' + k(c.p) + ' goes up above ' + k(c.g) + ', taking ' + k(c.x) + ' with it. Rotating the parent first is what halves the depth of the whole path.';
+      case 'zigzig-2': return 'Zig-zig, part 2: rotate(x): ' + k(c.x) + ' goes above ' + k(c.p) + '. Two levels up, now at depth ' + xd + '.';
+      case 'zigzag-1': return 'Zig-zag, part 1: rotate(x): ' + k(c.x) + ' goes above ' + k(c.p) + ', straightening the bend.';
+      case 'zigzag-2': return 'Zig-zag, part 2: rotate(x) again: ' + k(c.x) + ' goes above ' + k(c.g) + '. ' + k(c.p) + ' and ' + k(c.g) + ' end up as its two children. Now at depth ' + xd + '.';
+    }
+    return null;
+  }
+
+  const splayPredicts = [
+    {
+      at: (t, i, ts) => t.tag === 'test-zig' && t.data.cursors.g,
+      once: true,
+      ask: 'x has a grandparent. Which case is this?',
+      options: () => ['zig-zig', 'zig-zag'],
+      answer: (ts, i) => { for (let j = i + 1; j < ts.length; j++) { if (ts[j].tag === 'zigzig-1') return 'zig-zig'; if (ts[j].tag === 'zigzag-1') return 'zig-zag'; } return null; },
+      pick: 'option',
+      explain: () => 'Zig-zig when x and p are both left children or both right children; zig-zag when one is left and the other right.',
+    },
+    {
+      at: (t, i, ts) => t.tag === 'test-zigzig' && ts[i + 1] && ts[i + 1].tag === 'zigzig-1',
+      once: true,
+      ask: 'A zig-zig. Which node is rotated first? Click it.',
+      answer: (ts, i) => 'n' + ts[i].data.cursors.p,
+      explain: () => 'In a zig-zig the parent p goes first, then x. Rotating x twice would not shorten the path as much.',
+    },
+  ];
+
+  // ---- access --------------------------------------------------------------------------------------------------
+  X.topic({
+    id: 'splay-access', family: 'splay', order: 10, title: 'Access (zig, zig-zig, zig-zag)',
+    blurb: 'Search as in any BST, then splay: the node found climbs to the root in zig, zig-zig and zig-zag steps, and every node on its path gets roughly half as deep.',
+    code: SPLAY + `
+
+/* find key and splay it to the root; if it is missing, splay the last node met */
+struct node *access(int key)
+{
+    struct node *cur = root;                           /*@ start */
+    struct node *last = NULL;
+    while (cur != NULL && cur->key != key) {           /*@ test */
+        last = cur;                                    /*@ last */
+        if (key < cur->key)                            /*@ compare */
+            cur = cur->left;                           /*@ follow-left */
+        else
+            cur = cur->right;                          /*@ follow-right */
+    }
+    if (cur == NULL)                                   /*@ found-test */
+        cur = last;                                    /*@ use-last */
+    if (cur != NULL)                                   /*@ nonempty */
+        splay(cur);                                    /*@ splay */
+    return cur;                                        /*@ done */
+}`,
+    animate: ['rotate', 'splay', 'access'], quiet: ['rotate'],
+    inputs: [keysIn, { id: 'key', kind: 'int', label: 'Access', def: 5, lo: -99, hi: 999 }],
+    presets: [
+      { label: 'Deep left: zig-zig twice', values: { keys: [50, 30, 70, 20, 40, 60, 80, 10, 25, 5], key: 5 } },
+      { label: 'A bent path: zig-zag', values: { keys: [50, 10, 40, 20, 30, 70], key: 30 } },
+      { label: 'A chain from sorted input', values: { keys: [10, 20, 30, 40, 50, 60, 70], key: 70 } },
+      { label: 'Just a zig', values: { keys: [50, 30, 70, 20, 40, 60, 80], key: 30 } },
+      { label: 'A missing key', values: { keys: [50, 30, 70, 20, 40, 60, 80], key: 45 } },
+    ],
+    counters: ['compares', 'follows'],
+    main: (inp) => splayMain(inp, 'access(' + inp.key + ');'),
+    capture: capture(['cur', 'last', 'x', 'p', 'g']),
+    scene(ctx) {
+      const d = ctx.tick.data, tag = ctx.tick.tag, key = ctx.input.key, memo = ctx.memo;
+      // the call line is drawn once splay() has started, the return line once access() has returned
+      const c = (tag === 'splay' || tag === 'done') && ctx.prev ? ctx.prev.data.cursors : d.cursors;
+      memo.path = memo.path || [];
+      if (tag === 'last' && c.cur && !memo.path.includes(c.cur)) memo.path.push(c.cur);
+      if (tag === 'nonempty' && c.cur && !memo.path.includes(c.cur)) memo.path.push(c.cur);
+      if (tag === 'splay' || (tag === 'enter' && d.extra.fn === 'splay')) {
+        if (!memo.before) { const dm = depthMap(d); memo.before = new Map(memo.path.map((a) => [a, dm.get(a)])); }
+      }
+      const onPath = new Set(memo.path);
+      const s = splayScene(ctx, {
+        nodeCls: (n) => (onPath.has(n.addr) ? 'part-a' : ''),
+        label: (n, dm) => (memo.before && memo.before.has(n.addr) ? 'depth ' + memo.before.get(n.addr) + (dm.get(n.addr) !== memo.before.get(n.addr) ? ' → ' + dm.get(n.addr) : '') : ''),
+        cursors: d.extra.fn === 'access' ? { cur: c.cur, last: tag === 'last' || tag === 'use-last' ? c.last : null } : {},
+      });
+      const items = s.items, by = s.by;
+      if (d.extra.fn === 'access' && c.cur && s.pic.pos.has(c.cur) && ['test', 'compare', 'last'].includes(tag)) {
+        const at = s.pic.pos.get(c.cur), ck = by.get(c.cur).key;
+        items.push({ key: 'tok', kind: 'token', x: at.x + 40, y: at.y - 32, r: 15, text: String(key), cls: 'c-rose' });
+        if (tag === 'compare') items.push({ key: 'q', kind: 'text', x: at.x + 60, y: at.y - 28, text: key + (key < ck ? ' < ' : ' > ') + ck, cls: 'hot' });
+      }
+      const k = (a) => (a && by.has(a) ? by.get(a).key : 'NULL');
+      let say = splaySay(ctx, s);
+      if (say === null) {
+        switch (tag) {
+          case 'enter': say = d.extra.fn === 'access' ? 'access(' + key + '): first an ordinary search from the root. Then, whatever it finds is splayed up to the root.' : 'splay(x): now lift ' + k(c.x) + ' to the root.'; break;
+          case 'start': say = 'cur starts at the root, ' + k(c.cur) + '.'; break;
+          case 'test': say = c.cur ? (by.get(c.cur).key === key ? 'cur holds ' + key + ': found it.' : 'cur = ' + k(c.cur) + ', not ' + key + ': keep searching.') : 'cur is NULL: ' + key + ' is not in the tree.'; break;
+          case 'last': say = 'last = cur: remember ' + k(c.cur) + ' in case the search falls off the tree.'; break;
+          case 'compare': { const ck = by.get(c.cur).key; say = 'Compare ' + key + ' with ' + ck + ': go ' + (key < ck ? 'left.' : 'right.'); break; }
+          case 'follow-left': case 'follow-right': say = 'cur moves to ' + k(c.cur) + '.'; break;
+          case 'found-test': say = c.cur ? key + ' is in the tree.' : key + ' is missing.'; break;
+          case 'use-last': say = 'Splay the last node the search met, ' + k(c.cur) + ', anyway: the next search near ' + key + ' will be quick.'; break;
+          case 'nonempty': say = c.cur ? k(c.cur) + ' is at depth ' + depthMap(d).get(c.cur) + '. It will take about that many rotations to reach the root.' : 'The tree is empty: nothing to splay.'; break;
+          case 'splay': say = 'splay(' + k(c.cur) + '): lift it to the root.'; break;
+          case 'done': say = 'access() returns ' + k(c.cur) + ', now the root.'; break;
+          case 'after': {
+            const dm = depthMap(d);
+            const parts = memo.before ? [...memo.before].filter(([a]) => by.has(a)).map(([a, b]) => by.get(a).key + ': ' + b + ' → ' + dm.get(a)) : [];
+            say = (memo.before ? 'Depth before → after, for the nodes on the search path: ' + parts.join(', ') + '. ' : '') + 'The accessed node is the root. The deep end of its old path moved up, the old top moved down a little: the path was folded roughly in half.';
+            break;
+          }
+          default: say = '';
+        }
+      }
+      return { items, say, slow: /^zig/.test(tag) };
+    },
+    predict: splayPredicts.concat([
+      {
+        at: (t, i, ts) => t.tag === 'nonempty' && t.data.cursors.cur,
+        once: true,
+        ask: 'How many calls to rotate() will it take to bring this node to the root?',
+        options: () => ['0', '1', '2', '3', '4', '5', '6'],
+        answer: (ts, i) => String(Math.min(6, ts.slice(i).filter((t) => /^zig/.test(t.tag)).length)),
+        pick: 'option',
+        explain: () => 'One rotation per level: a node at depth d needs d rotations, done in pairs plus perhaps one zig at the end.',
+      },
+    ]),
+    quiz: [
+      { q: 'In a zig-zig step, which rotation comes first?', options: ['x with p', 'p with g', 'x with g', 'Either'], answer: 1, why: 'The parent first, then x. That order is what makes the whole path about half as deep.' },
+      { q: 'When is the zig case used?', options: ['When x is a leaf', 'When x\'s parent is the root', 'When the path bends', 'Always first'], answer: 1, why: 'With no grandparent, one rotation makes x the root.' },
+      { q: 'What does a splay tree store to stay balanced?', options: ['Heights', 'Colours', 'Nothing extra', 'Sizes'], answer: 2, why: 'Only keys and links. It may even be unbalanced; the splaying makes a long run of operations cheap on average.' },
+      { q: 'A search for a missing key...', options: ['Changes nothing', 'Splays the last node it reached', 'Inserts the key', 'Deletes a node'], answer: 1, why: 'The last node met is splayed, so the tree still adapts to where the searches go.' },
+      { q: 'The amortised cost of a splay-tree operation is...', options: ['O(1)', 'O(log n)', 'O(n)', 'O(n log n)'], answer: 1, why: 'Any one access may be slow, but a sequence of m operations costs O(m log n) in total.' },
+    ],
+  });
+
+  // ---- insert --------------------------------------------------------------------------------------------------
+  X.topic({
+    id: 'splay-insert', family: 'splay', order: 20, title: 'Insert',
+    blurb: 'Insert as in a plain BST, so the new key lands as a leaf, perhaps very deep; then splay it all the way to the root.',
+    code: SPLAY + `
+
+/* insert key as a leaf, as in a plain BST, then splay it to the root */
+void insert(int key)
+{
+    struct node *p = NULL;                             /*@ start */
+    struct node *cur = root;
+    struct node *n;
+    while (cur != NULL) {                              /*@ test */
+        p = cur;                                       /*@ parent */
+        if (key < cur->key)                            /*@ compare */
+            cur = cur->left;                           /*@ follow-left */
+        else
+            cur = cur->right;                          /*@ follow-right */
+    }
+    n = new_node(key, p);                              /*@ new */
+    if (p == NULL)                                     /*@ attach-test */
+        root = n;                                      /*@ first */
+    else if (key < p->key)                             /*@ side */
+        p->left = n;                                   /*@ attach-left */
+    else
+        p->right = n;                                  /*@ attach-right */
+    splay(n);                                          /*@ splay */
+}`,
+    animate: ['rotate', 'splay', 'insert'], quiet: ['rotate', 'new_node'],
+    inputs: [Object.assign({}, keysIn, { def: [50, 30, 70, 20, 40, 60, 80] }), { id: 'key', kind: 'int', label: 'Insert', def: 45, lo: -99, hi: 999 }],
+    check: (inp) => (inp.keys.includes(inp.key) ? 'That key is already in the tree; pick another' : null),
+    presets: [
+      { label: 'Into a balanced tree', values: { keys: [50, 30, 70, 20, 40, 60, 80], key: 45 } },
+      { label: 'At the end of a chain', values: { keys: [10, 20, 30, 40, 50, 60], key: 70 } },
+      { label: 'A new smallest key', values: { keys: [50, 30, 70, 20, 40, 10], key: 5 } },
+      { label: 'Under the root: one zig', values: { keys: [50], key: 30 } },
+      { label: 'Into an empty tree', values: { keys: [], key: 42 } },
+    ],
+    counters: ['compares', 'follows', 'allocs'],
+    main: (inp) => splayMain(inp, 'insert(' + inp.key + ');'),
+    capture: capture(['cur', 'p', 'n', 'x', 'g']),
+    scene(ctx) {
+      const d = ctx.tick.data, tag = ctx.tick.tag, key = ctx.input.key, memo = ctx.memo;
+      const c = tag === 'splay' && ctx.prev ? ctx.prev.data.cursors : d.cursors;
+      const inIns = d.extra.fn === 'insert';
+      const by0 = new Map(d.nodes.map((n) => [n.addr, n]));
+      const fresh = d.nodes.find((n) => n.key === key);
+      memo.walk = memo.walk || 0;
+      if (tag === 'parent') memo.walk++;
+      if (['attach-left', 'attach-right', 'first'].includes(tag)) memo.leafDepth = depthMap(d).get(fresh.addr);
+      if (/^zig/.test(tag)) memo.rot = (memo.rot || 0) + 1;
+      // where the new key was first attached: a faint ring that stays behind
+      if (['attach-left', 'attach-right'].includes(tag)) memo.ringAt = fresh.addr;
+      const s = splayScene(ctx, {
+        nodeCls: (n) => (fresh && n.addr === fresh.addr && !(d.extra.fn === 'splay') ? 'part-b' : ''),
+        label: (n, dm) => (fresh && n.addr === fresh.addr && memo.leafDepth !== undefined ? 'depth ' + dm.get(n.addr) : ''),
+        cursors: inIns ? { cur: c.cur, p: c.p } : {},
+      });
+      const items = s.items, by = s.by;
+      if (inIns && c.cur && s.pic.pos.has(c.cur) && ['test', 'compare', 'parent'].includes(tag)) {
+        const at = s.pic.pos.get(c.cur), ck = by.get(c.cur).key;
+        items.push({ key: 'tok', kind: 'token', x: at.x + 40, y: at.y - 32, r: 15, text: String(key), cls: 'c-green' });
+        if (tag === 'compare') items.push({ key: 'q', kind: 'text', x: at.x + 60, y: at.y - 28, text: key + (key < ck ? ' < ' : ' > ') + ck + (key < ck ? ': left' : ': right'), cls: 'hot' });
+      }
+      if (memo.leafDepth !== undefined && memo.leafDepth > 0) items.push({ key: 'was', kind: 'text', x: (s.pic.pos.get(fresh.addr) || { x: 0 }).x, y: -130, text: 'inserted at depth ' + memo.leafDepth + ', ' + (memo.rot || 0) + ' rotation' + (memo.rot === 1 ? '' : 's') + ' so far', cls: 'mw-note', anchor: 'middle' });
+      const k = (a) => (a && by0.has(a) ? by0.get(a).key : 'NULL');
+      let say = splaySay(ctx, s);
+      if (say === null) {
+        switch (tag) {
+          case 'enter': say = inIns ? 'insert(' + key + '): first exactly what a plain BST does, then one extra step that changes everything: splay the new node.' : 'splay(n): lift the new node ' + key + ' to the root.'; break;
+          case 'start': say = 'p will trail one step behind cur, which starts at the root (' + k(c.cur) + ').'; break;
+          case 'test': say = c.cur ? 'cur is at ' + k(c.cur) + ': keep walking down.' : 'cur fell off the tree under ' + k(c.p) + ': this is where ' + key + ' goes.'; break;
+          case 'parent': say = 'p = cur (' + k(c.cur) + ').'; break;
+          case 'compare': { const ck = by0.get(c.cur).key; say = key + (key < ck ? ' < ' : ' > ') + ck + ': go ' + (key < ck ? 'left.' : 'right.'); break; }
+          case 'follow-left': case 'follow-right': say = 'cur = ' + k(c.cur) + '.'; break;
+          case 'new': say = 'A new node for ' + key + ', with parent ' + k(c.p) + '.'; break;
+          case 'attach-test': say = c.p ? 'The tree was not empty.' : 'The tree was empty: the new node becomes the root, and there is nothing to splay.'; break;
+          case 'first': say = 'root = n.'; break;
+          case 'side': say = key + (key < by0.get(c.p).key ? ' < ' : ' > ') + k(c.p) + ': it hangs on the ' + (key < by0.get(c.p).key ? 'left.' : 'right.'); break;
+          case 'attach-left': case 'attach-right': say = 'Linked in as a leaf at depth ' + memo.leafDepth + '. A plain BST would stop here.'; break;
+          case 'splay': say = 'splay(n): bring ' + key + ' up to the root.'; break;
+          case 'after': say = key + ' went in at depth ' + (memo.leafDepth || 0) + ' and is now the root, after ' + plural(memo.rot || 0, 'rotation') + '. A key you have just used is the cheapest one to reach next.'; break;
+          default: say = '';
+        }
+      }
+      return { items, say, slow: /^zig/.test(tag) || tag === 'attach-left' || tag === 'attach-right' };
+    },
+    predict: splayPredicts.concat([
+      {
+        at: (t, i, ts) => (t.tag === 'attach-left' || t.tag === 'attach-right'),
+        once: true,
+        ask: 'How many rotations will the splay take?',
+        options: () => ['1', '2', '3', '4', '5', '6'],
+        answer: (ts, i) => String(Math.min(6, ts.slice(i).filter((t) => /^zig/.test(t.tag)).length)),
+        pick: 'option',
+        explain: () => 'As many as the depth where the new node was attached.',
+      },
+    ]),
+    quiz: [
+      { q: 'After inserting into a splay tree, where is the new key?', options: ['In a leaf', 'At the root', 'Wherever a BST would put it', 'Next to its parent'], answer: 1, why: 'It is inserted as a leaf, then splayed all the way up.' },
+      { q: 'Inserting 1, 2, 3, ..., n into an empty splay tree gives...', options: ['A balanced tree', 'A chain, but each insert costs only one rotation', 'An error', 'A tree of height log n'], answer: 1, why: 'Each new key is bigger than the root, attaches at depth 1, and one zig brings it up: a left-leaning chain, built cheaply. Searching the deep end later is slow once, then the tree reshapes.' },
+      { q: 'Why splay the new node rather than leave it as a leaf?', options: ['To free memory', 'Recently used keys tend to be used again, and the root is the cheapest place', 'To keep heights equal', 'The BST rules require it'], answer: 1, why: 'Splay trees bet on locality: what was touched recently stays near the top.' },
+      { q: 'Each rotation...', options: ['Changes the in-order sequence', 'Keeps the in-order sequence and moves one node up a level', 'Deletes a node', 'Swaps two keys'], answer: 1, why: 'A rotation only re-hangs three links; the keys stay in order from left to right.' },
+    ],
+    compareWith: 'bst-insert',
+  });
+})(SEE);
+
 // ==== topics/sqapps-1.js ====
 // Stacks at work: matching brackets, and turning infix expressions into postfix (shunting-yard).
 (function (SEE) {
@@ -30987,6 +31385,352 @@ int fact(int n)
       { q: 'What would happen without the base case (if n <= 1)?', options: ['It returns 0', 'The calls never stop, until the stack runs out of memory', 'It returns n', 'Nothing'], answer: 1, why: 'Every call would make another: a stack overflow.' },
       { q: 'Each frame has its own n. Why does that matter?', options: ['It does not', 'Each waiting call still has its own n when the answer comes back', 'It saves memory', 'It makes n global'], answer: 1, why: 'fact(4) still knows n = 4 after fact(3) returns, because fact(3) used a different n.' },
       { q: 'How much stack memory does fact(n) use?', options: ['O(1)', 'O(n): one frame per level', 'O(n!)', 'O(log n)'], answer: 1, why: 'n frames are on the stack at the deepest point.' },
+    ],
+  });
+})(SEE);
+
+// ==== topics/treap-1.js ====
+// Treaps: the family, insert (BST insert, then rotate up by priority) and delete (rotate down, then cut).
+(function (SEE) {
+  'use strict';
+  const X = SEE.Strux, T = X.TreeKit;
+
+  const ROTATE = `/* lift the left child of *t into its place */
+void rotate_right(struct node **t)
+{
+    struct node *l = (*t)->left;
+    (*t)->left = l->right;
+    l->right = *t;
+    *t = l;
+}
+
+/* lift the right child of *t into its place */
+void rotate_left(struct node **t)
+{
+    struct node *r = (*t)->right;
+    (*t)->right = r->left;
+    r->left = *t;
+    *t = r;
+}`;
+
+  X.family({
+    id: 'treap', order: 6, group: 'Balanced trees', title: 'Treaps',
+    blurb: 'Every node has a key and a random priority. By key it is a binary search tree; by priority it is a heap, bigger priorities on top. Random priorities keep it balanced on average.',
+    head: `#include <stdio.h>
+#include <stdlib.h>
+
+/* a treap node: ordered by key like a BST, and by pri like a heap (parents have bigger pri) */
+struct node {
+    int key;
+    int pri;
+    struct node *left;
+    struct node *right;
+};
+
+struct node *root = NULL;
+
+struct node *new_node(int key, int pri)
+{
+    struct node *n = malloc(sizeof *n);
+    n->key = key;
+    n->pri = pri;
+    n->left = NULL;
+    n->right = NULL;
+    return n;
+}
+
+/* main uses this to build the treap you chose: a plain BST insert. Done in order of
+   falling priority, every parent comes before its children, so no rotation is needed */
+void add(struct node **t, int key, int pri)
+{
+    while (*t != NULL)
+        t = key < (*t)->key ? &(*t)->left : &(*t)->right;
+    *t = new_node(key, pri);
+}`,
+  });
+
+  const keysIn = { id: 'keys', kind: 'ints', label: 'Keys', def: [50, 30, 70, 20, 40, 60, 80], min: 0, max: 12, distinct: true, check: (v) => (v.some((x) => x < -99 || x > 999) ? 'Keys: from -99 to 999' : null) };
+  const prisIn = { id: 'pris', kind: 'ints', label: 'Their priorities', def: [90, 60, 80, 30, 50, 40, 70], min: 0, max: 12, distinct: true, check: (v) => (v.some((x) => x < 1 || x > 99) ? 'Priorities: from 1 to 99' : null) };
+  const treapMain = (inp, call) => {
+    const pairs = inp.keys.map((k, j) => [k, inp.pris[j]]).sort((a, b) => b[1] - a[1]);
+    return `int main(void)
+{
+    /* the keys and priorities, highest priority first */
+    int keys[] = { ${pairs.length ? pairs.map((p) => p[0]).join(', ') : '0'} };
+    int pris[] = { ${pairs.length ? pairs.map((p) => p[1]).join(', ') : '0'} };
+    int i;
+    for (i = 0; i < ${pairs.length}; i++)
+        add(&root, keys[i], pris[i]);
+    ${call}
+    return 0;
+}`;
+  };
+  const sameLen = (inp) => (inp.keys.length !== inp.pris.length ? 'Give one priority for every key (' + inp.keys.length + ' keys, ' + inp.pris.length + ' priorities)' : null);
+  /** The tree, plus the node *t refers to in every active call (oldest first) */
+  const capture = (P) => {
+    const out = T.capture(P, { root: 'root', fields: ['key', 'pri'], cursors: ['l', 'r'] });
+    out.stack = [];
+    for (let fi = P.frames.length - 1; fi >= 0; fi--) {
+      const v = P.find('t', fi);
+      if (!v || !P.frames[fi] || !['insert', 'delete'].includes(P.frames[fi].name) || !P.isSet('t', fi)) continue;
+      const link = P.val('t', fi);
+      const pt = SEE.Types.unqual(v.type).to;
+      out.stack.push({ node: P.read(pt, link) || 0, link });
+    }
+    out.fn = P.frames[0].name;
+    return out;
+  };
+  const plural = (k, w, ws) => k + ' ' + (k === 1 ? w : ws || w + 's');
+
+  /** Tree, priority badges, red edges where the heap order is broken, the active calls */
+  function treapPicture(ctx, d, opts) {
+    const by = new Map(d.nodes.map((n) => [n.addr, n]));
+    const active = new Set(d.stack.map((s) => s.node).filter(Boolean));
+    const cur = d.stack.length ? d.stack[d.stack.length - 1].node : 0;
+    const pic = T.picture(ctx, d, {
+      pos: opts.pos,
+      nodeCls: (n) => (opts.nodeCls && opts.nodeCls(n)) || (n.addr === cur && ctx.tick.tag !== 'after' ? 'focus' : active.has(n.addr) && ctx.tick.tag !== 'after' ? 'part-a' : ''),
+      edgeCls: (n, side) => { const c = by.get(n.links[side]); return c && !c.freed && c.pri > n.pri ? 'mw-bad' : active.has(n.addr) && active.has(n.links[side]) ? 'mw-path' : ''; },
+    });
+    const items = pic.items.filter((it) => it.kind !== 'cursor');
+    for (const n of d.nodes) {
+      const p = pic.pos.get(n.addr);
+      if (!p || n.freed) continue;
+      const parent = d.nodes.find((m) => !m.freed && (m.links.left === n.addr || m.links.right === n.addr));
+      const bad = parent && parent.pri < n.pri;
+      items.push({ key: 'pr' + n.addr, kind: 'token', x: p.x + 22, y: p.y - 22, r: 12, text: String(n.pri), cls: 'mw-pri' + (bad ? ' mw-badpri' : '') });
+    }
+    return { items, pic, by, cur, active };
+  }
+
+  // ---- insert --------------------------------------------------------------------------------------------------
+  X.topic({
+    id: 'treap-insert', family: 'treap', order: 10, title: 'Insert (rotate up by priority)',
+    blurb: 'First a plain BST insert by key: the new node becomes a leaf. Then, on the way back up the recursion, it rotates above every parent with a smaller priority, like a heap\'s sift-up.',
+    code: ROTATE + `
+
+/* insert key with priority pri below *t: BST order by key, heap order by pri */
+void insert(struct node **t, int key, int pri)
+{
+    if (*t == NULL) {                              /*@ empty */
+        *t = new_node(key, pri);                   /*@ new */
+        return;                                    /*@ placed */
+    }
+    if (key < (*t)->key) {                         /*@ compare */
+        insert(&(*t)->left, key, pri);             /*@ go-left */
+        if ((*t)->left->pri > (*t)->pri)           /*@ check-left */
+            rotate_right(t);                       /*@ rotate-right */
+    } else {
+        insert(&(*t)->right, key, pri);            /*@ go-right */
+        if ((*t)->right->pri > (*t)->pri)          /*@ check-right */
+            rotate_left(t);                        /*@ rotate-left */
+    }
+}                                                  /*@ back */`,
+    animate: ['rotate_right', 'rotate_left', 'insert'], quiet: ['rotate_right', 'rotate_left', 'new_node'],
+    inputs: [keysIn, prisIn, { id: 'key', kind: 'int', label: 'Insert key', def: 45, lo: -99, hi: 999 }, { id: 'pri', kind: 'int', label: 'with priority', def: 95, lo: 1, hi: 99 }],
+    check: (inp) => sameLen(inp) || (inp.keys.includes(inp.key) ? 'That key is already in the treap' : null) || (inp.pris.includes(inp.pri) ? 'Pick a priority no other key has' : null),
+    presets: [
+      { label: 'Climbs to the root', values: { keys: [50, 30, 70, 20, 40, 60, 80], pris: [90, 60, 80, 30, 50, 40, 70], key: 45, pri: 95 } },
+      { label: 'Climbs part way', values: { keys: [50, 30, 70, 20, 40, 60, 80], pris: [90, 60, 80, 30, 50, 40, 70], key: 45, pri: 65 } },
+      { label: 'Stays a leaf', values: { keys: [50, 30, 70, 20, 40, 60, 80], pris: [90, 60, 80, 30, 50, 40, 70], key: 45, pri: 10 } },
+      { label: 'Into an empty treap', values: { keys: [], pris: [], key: 42, pri: 50 } },
+    ],
+    counters: ['compares', 'allocs'],
+    main: (inp) => treapMain(inp, `insert(&root, ${inp.key}, ${inp.pri});`),
+    capture,
+    scene(ctx) {
+      const d = ctx.tick.data, tag = ctx.tick.tag, key = ctx.input.key, pri = ctx.input.pri, memo = ctx.memo;
+      const by = new Map(d.nodes.map((n) => [n.addr, n]));
+      const fresh = d.nodes.find((n) => n.key === key && !n.freed);
+      // a call line is drawn once the callee has started, a return line once it has returned
+      const callish = ['go-left', 'go-right'].includes(tag) && ctx.prev;
+      const stack = callish ? ctx.prev.data.stack : d.stack;
+      const cur = stack.length ? stack[stack.length - 1].node : 0, cn = by.get(cur);
+      if (/^rotate/.test(tag)) memo.rot = (memo.rot || 0) + 1;
+      // new_node() is quiet, so its line is drawn before *t is set: hang the new node where it is going
+      let pos = null;
+      if (fresh && !d.nodes.some((n) => n.links.left === fresh.addr || n.links.right === fresh.addr) && d.root !== fresh.addr) {
+        const parent = stack.length >= 2 ? by.get(stack[stack.length - 2].node) : null;
+        if (parent) {
+          const clone = { nodes: d.nodes.map((n) => (n.addr === parent.addr ? Object.assign({}, n, { links: Object.assign({}, n.links, key < n.key ? { left: fresh.addr } : { right: fresh.addr }) }) : n)), root: d.root, cursors: {} };
+          pos = T.layout(clone);
+        }
+      }
+      const tp = treapPicture(ctx, Object.assign({}, d, { stack }), { pos, nodeCls: (n) => (fresh && n.addr === fresh.addr ? 'part-b' : '') });
+      const items = tp.items;
+      // the key and its priority, travelling down beside the node it is compared with
+      if (!fresh && cn && tp.pic.pos.has(cur)) {
+        const at = tp.pic.pos.get(cur);
+        items.push({ key: 'tok', kind: 'token', x: at.x + 52, y: at.y - 10, r: 16, text: String(key), cls: 'c-indigo' });
+        if (tag === 'compare') items.push({ key: 'q', kind: 'text', x: at.x + 74, y: at.y - 6, text: key + (key < cn.key ? ' < ' : ' > ') + cn.key + (key < cn.key ? ': left' : ': right'), cls: 'hot' });
+      }
+      if (fresh && /^check/.test(tag) && cn) {
+        const at = tp.pic.pos.get(cur), child = by.get(cn.links[tag === 'check-left' ? 'left' : 'right']);
+        if (at && child) items.push({ key: 'q', kind: 'text', x: at.x + 44, y: at.y - 40, text: 'pri ' + child.pri + (child.pri > cn.pri ? ' > ' : ' < ') + cn.pri + (child.pri > cn.pri ? ': rotate' : ': fine'), cls: child.pri > cn.pri ? 'mw-tag' : 'mw-note' });
+      }
+      const k = (a) => (a && by.has(a) ? by.get(a).key : 'NULL');
+      let say = '';
+      switch (tag) {
+        case 'enter': say = 'insert(&root, ' + key + ', ' + pri + '). Step one is an ordinary BST insert by key. Step two happens as the recursion returns: the new node rotates up while its priority beats its parent\'s.'; break;
+        case 'empty': say = cn ? '*t is the node ' + cn.key + ' (priority ' + cn.pri + '): not empty, keep going down.' : '*t is NULL: this empty place is where ' + key + ' goes.'; break;
+        case 'new': say = 'A new node, key ' + key + ' with priority ' + pri + ', fills the empty place: it is a leaf.'; break;
+        case 'placed': say = 'Return. From here on, each call that is waiting gets its turn to check the heap order.'; break;
+        case 'compare': say = 'Compare ' + key + ' with ' + cn.key + ': ' + (key < cn.key ? 'smaller, go left.' : 'bigger, go right.') + ' Priorities play no part on the way down.'; break;
+        case 'go-left': case 'go-right': say = 'insert(&(*t)->' + (tag === 'go-left' ? 'left' : 'right') + ', ...): one level deeper. This call at ' + k(cur) + ' waits.'; break;
+        case 'check-left': case 'check-right': {
+          const child = cn && by.get(cn.links[tag === 'check-left' ? 'left' : 'right']);
+          say = 'Back in the call at ' + cn.key + '. Its ' + (tag === 'check-left' ? 'left' : 'right') + ' child ' + child.key + ' has priority ' + child.pri + (child.pri > cn.pri ? ', bigger than ' + cn.key + '\'s ' + cn.pri + ': the heap order is broken (red edge). Rotate.' : ', smaller than ' + cn.key + '\'s ' + cn.pri + ': the heap order holds here.');
+          break;
+        }
+        case 'rotate-right': case 'rotate-left': say = 'rotate_' + (tag === 'rotate-right' ? 'right' : 'left') + '(t): ' + key + ' moves up one level and ' + k(ctx.prev && ctx.prev.data.stack.length ? ctx.prev.data.stack[ctx.prev.data.stack.length - 1].node : 0) + ' goes down to be its child. Left to right, the keys are still in order.'; break;
+        case 'back': { const up = d.stack.length > 1 ? by.get(d.stack[d.stack.length - 2].node) : null; say = up ? 'This call is done; back to the call at ' + up.key + '.' : 'The outermost call is done.'; break; }
+        case 'after': { const dep = (() => { let a = d.root, n = 0; while (a && by.has(a) && by.get(a).key !== key) { a = key < by.get(a).key ? by.get(a).links.left : by.get(a).links.right; n++; } return n; })(); say = key + ' is in at depth ' + dep + ', after ' + plural(memo.rot || 0, 'rotation') + '. Every edge goes from a bigger priority down to a smaller one, and the keys are in BST order.'; break; }
+      }
+      return { items, say, slow: /^rotate/.test(tag) || tag === 'new' };
+    },
+    predict: [
+      {
+        at: (t, i) => t.tag === 'compare' && i < 4, once: true,
+        ask: (t, ts, i, ctx) => 'Under which node will ' + ctx.input.key + ' first be attached? Click it.',
+        answer: (ts, i, ctx) => { const d = ts[i].data, by = new Map(d.nodes.map((n) => [n.addr, n])); let a = d.root, last = 0; while (a && by.has(a)) { last = a; a = ctx.input.key < by.get(a).key ? by.get(a).links.left : by.get(a).links.right; } return last ? 'n' + last : null; },
+        explain: () => 'By key alone, exactly as in a BST: where a search for it falls off the tree.',
+      },
+      {
+        at: (t, i, ts) => /^check/.test(t.tag), once: true,
+        ask: 'Will the new node rotate up past this one?',
+        options: () => ['Yes', 'No'],
+        answer: (ts, i) => (ts[i + 1] && /^rotate/.test(ts[i + 1].tag) ? 'Yes' : 'No'),
+        pick: 'option',
+        explain: () => 'Only if its priority is bigger than this node\'s.',
+      },
+      {
+        at: (t) => t.tag === 'enter', once: true,
+        ask: 'How many rotations will this insert need?',
+        options: () => ['0', '1', '2', '3', '4'],
+        answer: (ts) => String(Math.min(4, ts.filter((t) => /^rotate/.test(t.tag)).length)),
+        pick: 'option',
+        explain: () => 'One for every ancestor on its path with a smaller priority, counted from the bottom until one has a bigger priority.',
+      },
+    ],
+    quiz: [
+      { q: 'A treap is ordered...', options: ['By priority only', 'By key like a BST, and by priority like a heap', 'By insertion time', 'By key like a heap'], answer: 1, why: 'Left subtree keys are smaller, right ones bigger; and every parent\'s priority is bigger than its children\'s.' },
+      { q: 'Why rotate rather than swap the two nodes\' contents?', options: ['Rotations are faster', 'A rotation keeps the BST order by key while changing which node is on top', 'Swapping is not allowed in C', 'To free memory'], answer: 1, why: 'Swapping keys would break the BST order; a rotation preserves it.' },
+      { q: 'Where does the new node start before any rotation?', options: ['At the root', 'As a leaf, where a BST insert puts it', 'Next to the node with the closest priority', 'At the end of a list'], answer: 1, why: 'Priority only matters on the way back up.' },
+      { q: 'Why give nodes random priorities?', options: ['To make keys unique', 'The treap then has the shape of a BST built in random order: expected depth O(log n)', 'To sort the keys', 'They are not random'], answer: 1, why: 'Whatever order the keys arrive in, the shape depends only on the random priorities.' },
+      { q: 'A new node with the biggest priority of all ends up...', options: ['As a leaf', 'At the root', 'In the middle', 'It depends on its key only'], answer: 1, why: 'It beats every ancestor, so it rotates all the way up.' },
+    ],
+  });
+
+  // ---- delete --------------------------------------------------------------------------------------------------
+  X.topic({
+    id: 'treap-delete', family: 'treap', order: 20, title: 'Delete (rotate down, then cut)',
+    blurb: 'Find the node, then push it down: rotate up whichever child has the bigger priority, again and again, until the node is a leaf. Then simply cut it off.',
+    code: ROTATE + `
+
+/* delete key below *t: rotate it down until it is a leaf, then cut it off */
+void delete(struct node **t, int key)
+{
+    struct node *l, *r;
+    if (*t == NULL)                                     /*@ empty */
+        return;                                         /*@ missing */
+    if (key < (*t)->key)                                /*@ compare */
+        delete(&(*t)->left, key);                       /*@ go-left */
+    else if (key > (*t)->key)                           /*@ compare-right */
+        delete(&(*t)->right, key);                      /*@ go-right */
+    else {
+        l = (*t)->left;                                 /*@ found */
+        r = (*t)->right;                                /*@ kids */
+        if (l == NULL && r == NULL) {                   /*@ leaf-test */
+            free(*t);                                   /*@ free */
+            *t = NULL;                                  /*@ cut */
+        } else if (r == NULL || (l != NULL && l->pri > r->pri)) {    /*@ which */
+            rotate_right(t);                            /*@ rotate-right */
+            delete(&(*t)->right, key);                  /*@ follow-down */
+        } else {
+            rotate_left(t);                             /*@ rotate-left */
+            delete(&(*t)->left, key);                   /*@ follow-down */
+        }
+    }
+}                                                       /*@ back */`,
+    animate: ['rotate_right', 'rotate_left', 'delete'], quiet: ['rotate_right', 'rotate_left'],
+    inputs: [keysIn, prisIn, { id: 'key', kind: 'int', label: 'Delete', def: 50, lo: -99, hi: 999 }],
+    check: sameLen,
+    presets: [
+      { label: 'Delete the root', values: { keys: [50, 30, 70, 20, 40, 60, 80], pris: [90, 60, 80, 30, 50, 40, 70], key: 50 } },
+      { label: 'A node in the middle', values: { keys: [50, 30, 70, 20, 40, 60, 80, 35, 45], pris: [90, 60, 80, 30, 50, 40, 70, 20, 25], key: 30 } },
+      { label: 'Already a leaf', values: { keys: [50, 30, 70, 20, 40, 60, 80], pris: [90, 60, 80, 30, 50, 40, 70], key: 60 } },
+      { label: 'Not in the treap', values: { keys: [50, 30, 70, 20, 40, 60, 80], pris: [90, 60, 80, 30, 50, 40, 70], key: 65 } },
+    ],
+    counters: ['compares', 'frees'],
+    main: (inp) => treapMain(inp, `delete(&root, ${inp.key});`),
+    capture,
+    scene(ctx) {
+      const d = ctx.tick.data, tag = ctx.tick.tag, key = ctx.input.key, memo = ctx.memo;
+      const by = new Map(d.nodes.map((n) => [n.addr, n]));
+      const callish = ['go-left', 'go-right', 'follow-down'].includes(tag) && ctx.prev;
+      const stack = callish ? ctx.prev.data.stack : d.stack;
+      const cur = stack.length ? stack[stack.length - 1].node : 0, cn = by.get(cur);
+      const victim = d.nodes.find((n) => n.key === key);
+      if (/^rotate/.test(tag)) memo.rot = (memo.rot || 0) + 1;
+      if (victim && memo.startDepth === undefined) { let a = d.root, n = 0; while (a && by.has(a) && a !== victim.addr) { a = key < by.get(a).key ? by.get(a).links.left : by.get(a).links.right; n++; } memo.startDepth = n; }
+      const tp = treapPicture(ctx, Object.assign({}, d, { stack }), { nodeCls: (n) => (victim && n.addr === victim.addr && !n.freed && memo.found ? 'mw-sink' : '') });
+      if (tag === 'found') memo.found = true;
+      const items = tp.items;
+      if (cn && !memo.found && tag !== 'found' && tp.pic.pos.has(cur) && tag !== 'after') {
+        const at = tp.pic.pos.get(cur);
+        items.push({ key: 'tok', kind: 'token', x: at.x + 52, y: at.y - 10, r: 16, text: String(key), cls: 'c-rose' });
+        if (tag === 'compare' || tag === 'compare-right') items.push({ key: 'q', kind: 'text', x: at.x + 74, y: at.y - 6, text: key === cn.key ? key + ' = ' + cn.key : key + (key < cn.key ? ' < ' : ' > ') + cn.key, cls: 'hot' });
+      }
+      // in the found call: the two children and which one comes up
+      if (victim && !victim.freed && ['kids', 'leaf-test', 'which'].includes(tag)) {
+        const l = by.get(victim.links.left), r = by.get(victim.links.right);
+        const up = !r || (l && l.pri > r.pri) ? l : r;
+        const at = tp.pic.pos.get(victim.addr);
+        if (at && tag === 'which' && up) items.push({ key: 'q', kind: 'text', x: at.x, y: at.y - 52, text: (l && r ? 'pri ' + l.pri + ' vs ' + r.pri + ': ' : '') + up.key + ' comes up', cls: 'mw-tag', anchor: 'middle' });
+      }
+      const k = (a) => (a && by.has(a) ? by.get(a).key : 'NULL');
+      let say = '';
+      switch (tag) {
+        case 'enter': say = 'delete(&root, ' + key + '). A node with children cannot just be removed, but a leaf can. So the node is rotated down until it is a leaf.'; break;
+        case 'empty': say = cn ? '*t is ' + cn.key + '.' : '*t is NULL.'; break;
+        case 'missing': say = key + ' is not in the treap: nothing to delete.'; break;
+        case 'compare': say = key < cn.key ? key + ' < ' + cn.key + ': it can only be on the left.' : key + ' is not smaller than ' + cn.key + '.'; break;
+        case 'compare-right': say = key > cn.key ? key + ' > ' + cn.key + ': go right.' : key + ' = ' + cn.key + ': this is the node to delete.'; break;
+        case 'go-left': case 'go-right': say = 'One level down.'; break;
+        case 'found': { const n = victim; say = 'l = ' + k(n.links.left) + ', the left child' + (by.get(n.links.left) ? ' (priority ' + by.get(n.links.left).pri + ')' : '') + '.'; break; }
+        case 'kids': { const n = victim; say = 'r = ' + k(n.links.right) + ', the right child' + (by.get(n.links.right) ? ' (priority ' + by.get(n.links.right).pri + ')' : '') + '.'; break; }
+        case 'leaf-test': say = victim.links.left || victim.links.right ? key + ' still has a child, so it cannot be cut off yet.' : key + ' has no children now: it is a leaf.'; break;
+        case 'which': { const l = by.get(victim.links.left), r = by.get(victim.links.right); const up = !r || (l && l.pri > r.pri) ? l : r; say = (l && r ? 'Of its children, ' + up.key + ' has the bigger priority (' + up.pri + '), so ' + up.key + ' must be the one to come up: the other one stays below it, and the heap order holds.' : 'It has only one child, ' + up.key + ': that one comes up.'); break; }
+        case 'rotate-right': case 'rotate-left': { const p = victim && d.nodes.find((m) => m.links.left === victim.addr || m.links.right === victim.addr); say = 'rotate_' + (tag === 'rotate-right' ? 'right' : 'left') + '(t): ' + k(p && p.addr) + ' moves up into ' + key + '\'s place and ' + key + ' sinks one level, to depth ' + (() => { let a = d.root, n = 0; while (a && by.has(a) && a !== victim.addr) { a = key < by.get(a).key ? by.get(a).links.left : by.get(a).links.right; n++; } return n; })() + '. Only the sinking node breaks the heap order (red edge), and it is about to go.'; break; }
+        case 'follow-down': say = 'Follow ' + key + ' down and repeat.'; break;
+        case 'free': say = 'free(*t): the leaf ' + key + ' goes back to the heap.'; break;
+        case 'cut': say = '*t = NULL: the parent\'s link is cleared. ' + key + ' is gone.'; break;
+        case 'back': { const up = d.stack.length > 1 ? by.get(d.stack[d.stack.length - 2].node) : null; say = up ? 'This call is done; back to the call at ' + up.key + '.' : 'The outermost call is done.'; break; }
+        case 'after': say = memo.found ? key + ' sank from depth ' + memo.startDepth + ' with ' + plural(memo.rot || 0, 'rotation') + ' and was cut off as a leaf. Every rotation lifted the child with the bigger priority, so the heap order never broke.' : key + ' was not in the treap; nothing changed.'; break;
+      }
+      return { items, say, slow: /^rotate/.test(tag) || tag === 'cut' || tag === 'free' };
+    },
+    predict: [
+      {
+        at: (t, i, ts) => t.tag === 'which' && ts[i + 1] && /^rotate/.test(ts[i + 1].tag), once: true,
+        ask: 'Which child will be rotated up into this place? Click it.',
+        answer: (ts, i) => { const d = ts[i].data, by = new Map(d.nodes.map((n) => [n.addr, n])); const v = d.nodes.find((n) => n.addr === d.stack[d.stack.length - 1].node); const l = by.get(v.links.left), r = by.get(v.links.right); const up = !r || (l && l.pri > r.pri) ? l : r; return 'n' + up.addr; },
+        explain: () => 'The child with the bigger priority: it can sit above the other one without breaking the heap order.',
+      },
+      {
+        at: (t) => t.tag === 'enter', once: true,
+        ask: 'How many rotations before the node is a leaf?',
+        options: () => ['0', '1', '2', '3', '4'],
+        answer: (ts) => String(Math.min(4, ts.filter((t) => /^rotate/.test(t.tag)).length)),
+        pick: 'option',
+        explain: () => 'One per level it has to sink; it stops as soon as it has no children.',
+      },
+    ],
+    quiz: [
+      { q: 'Why is the node rotated down rather than replaced by its successor, as in a BST?', options: ['Successors do not exist in treaps', 'Moving a key would carry its priority to a place where the heap order may break; rotations keep both orders', 'It is shorter code only', 'To save memory'], answer: 1, why: 'Each rotation keeps the keys in order and lifts the right child by priority, so both orders hold at every step.' },
+      { q: 'Which child is rotated up?', options: ['Always the left', 'The one with the smaller key', 'The one with the bigger priority', 'The one with fewer children'], answer: 2, why: 'It becomes the parent of the other child, so its priority must be the bigger one.' },
+      { q: 'When does the sinking stop?', options: ['After one rotation', 'When the node has no children', 'When it reaches depth log n', 'When its priority is smallest'], answer: 1, why: 'A leaf can be cut off by setting one link to NULL.' },
+      { q: 'If the node has only one child...', options: ['That child is rotated up', 'The node is freed at once', 'An error', 'Nothing happens'], answer: 0, why: 'This code still rotates; many versions splice the single child straight in, which has the same result.' },
     ],
   });
 })(SEE);
