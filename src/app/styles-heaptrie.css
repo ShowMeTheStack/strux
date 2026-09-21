@@ -1,0 +1,65 @@
+/* Heaps and tries: tree edges drawn as plain lines that show the heap rule, small alphabet cells,
+   end-of-word marks. Colours come from the theme variables, so light and dark both work. */
+.it-line.hp-edge .plain-line { stroke: var(--node-line); stroke-width: 2.2; }
+.it-line.hp-bad .plain-line { stroke: var(--bad); stroke-width: 3; stroke-dasharray: 6 4; }
+.it-line.hp-path .plain-line { stroke: var(--part-b); stroke-width: 3; }
+.it-line.hp-done .plain-line { stroke: var(--part-a); stroke-width: 2.6; }
+.it-line.hp-cmp .plain-line { stroke: var(--hot); stroke-width: 4; stroke-dasharray: 2 6; stroke-linecap: round; }
+.it-line.hp-div .plain-line { stroke: var(--c-rose); stroke-width: 2.5; }
+.it-line.hp-ghost .plain-line { stroke: var(--node-line); stroke-width: 1.5; stroke-dasharray: 3 5; }
+.it-vertex.hp-stale .vertex-circle { fill: none; stroke-dasharray: 4 4; }
+.it-vertex.hp-stale .vertex-text { fill: var(--muted); }
+.it-cell.hp-stale .cell-box { fill: none; stroke-dasharray: 4 4; }
+.it-cell.hp-stale .cell-text { fill: var(--muted); font-weight: 500; }
+.it-cell.hp-free .cell-box { fill: none; stroke-dasharray: 3 5; }
+.it-cell.hp-free .cell-text { fill: var(--muted); }
+.it-text.hp-size .free-text { font: 700 12px var(--mono); fill: var(--c-rose); }
+.it-text.hp-note .free-text { font: 600 13px var(--font); fill: var(--muted); }
+.it-text.hp-rule .free-text { font: 600 13px var(--font); fill: var(--text); }
+.it-arrow.hp-rel .arrow-path { stroke: var(--hot); stroke-width: 2; stroke-dasharray: 5 4; }
+.it-arrow.hp-rel .arrow-label { fill: var(--hot); font: 700 12px var(--mono); }
+.it-vertex.hp-out .vertex-circle { fill: var(--surface2); stroke: var(--c-rose); stroke-width: 2.5; }
+.it-token.hp-key .token-dot { fill: var(--c-rose); }
+.it-token.hp-key .token-text { font-size: 14px; }
+.it-token.tr-letter .token-dot { fill: var(--c-rose); }
+.it-token.tr-letter .token-text { font: 700 15px var(--mono); }
+.it-region.tr-sub .region-box { fill: var(--part-b-soft); stroke: var(--part-b); stroke-width: 1.5; stroke-dasharray: 6 5; opacity: 0.75; }
+.it-region.hp-sub .region-box { fill: var(--part-b-soft); stroke: var(--part-b); stroke-width: 1.5; stroke-dasharray: 6 5; opacity: 0.7; }
+
+/* tries: a node whose end flag is set is filled; its word is written under it */
+.it-vertex.tr-end .vertex-circle { fill: var(--part-a); stroke: var(--part-a); }
+.it-vertex.tr-end .vertex-text { fill: #fff; }
+:root[data-theme="dark"] .it-vertex.tr-end .vertex-text { fill: #0f1220; }
+.it-vertex.tr-end .vertex-sub, .it-vertex.tr-hole .vertex-sub { fill: var(--part-a); font: 700 12px var(--mono); paint-order: stroke; stroke: var(--st-bg); stroke-width: 5px; stroke-linejoin: round; }
+.it-vertex.tr-hole .vertex-sub { fill: var(--bad); }
+.it-vertex.tr-root .vertex-text { font: 700 12px var(--mono); fill: var(--muted); }
+.it-vertex.tr-path .vertex-circle { stroke: var(--part-b); stroke-width: 3; }
+.it-vertex.tr-cur .vertex-circle { stroke: var(--hot); stroke-width: 4; }
+.it-vertex.tr-new .vertex-circle { fill: var(--hot-soft); stroke: var(--hot); }
+.it-vertex.tr-dead .vertex-circle { fill: var(--freed); stroke: var(--bad); stroke-dasharray: 5 4; }
+.it-vertex.tr-dead .vertex-text { fill: var(--bad); }
+.it-vertex.tr-hole .vertex-circle { fill: none; stroke: var(--bad); stroke-width: 2; stroke-dasharray: 4 4; }
+.it-vertex.tr-hole .vertex-text { font: 700 11px var(--mono); fill: var(--bad); }
+.it-vertex.tr-stack .vertex-circle { stroke: var(--c-violet); stroke-width: 3.5; }
+.it-arrow.tr-path .arrow-path { stroke: var(--part-b); stroke-width: 3; }
+.it-arrow.tr-new .arrow-path { stroke: var(--hot); stroke-width: 3; }
+.it-arrow.tr-stack .arrow-path { stroke: var(--c-violet); stroke-width: 3; }
+.it-cell.tr-tile .cell-text { font: 700 18px var(--mono); }
+.it-cell.tr-tile.done .cell-text { fill: #fff; }
+.it-cell.tr-slot .cell-text { font: 600 11px var(--mono); }
+.it-cell.tr-slot .cell-box { stroke-width: 1; }
+.it-cell.tr-slot.tr-on .cell-box { fill: var(--part-b-soft); stroke: var(--part-b); }
+.it-cell.tr-slot.tr-on .cell-text { fill: var(--text); font-weight: 700; }
+.it-cell.tr-slot.tr-probe .cell-box { stroke: var(--hot); stroke-width: 3; }
+.it-cell.tr-slot.tr-probe.tr-on .cell-box { fill: var(--hot-soft); }
+.it-text.tr-word .free-text { font: 700 15px var(--mono); fill: var(--part-a); }
+.it-text.tr-label .free-text { font: 600 12px var(--mono); fill: var(--muted); }
+
+/* text styles (the class sits on the item's group, so the selectors go through it) */
+.it-text.hp-hot .free-text { fill: var(--hot); font-weight: 700; }
+.it-text.hp-good .free-text { fill: var(--good); font-weight: 700; }
+.it-text.hp-badt .free-text { fill: var(--bad); font-weight: 700; }
+.it-text.hp-title .free-text { font: 700 13px var(--font); fill: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.it-text.hp-idx .free-text { font: 500 12px var(--mono); fill: var(--muted); }
+.it-text.hp-code .free-text { font: 600 14px var(--mono); fill: var(--text); }
+.it-region.hp-sub .region-text, .it-region.tr-sub .region-text { fill: var(--part-b); }
