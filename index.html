@@ -12569,6 +12569,185 @@ void perror(const char *s)
   };
 })(SEE);
 
+// ==== stage/kit-trie.js ====
+// Drawing tries. Only the children that exist are drawn: each node shows the letter of the pointer
+// that leads to it, a node whose end flag is set is filled and carries its word, and the 26 child
+// pointers of one node can be laid out as a strip of slots to show that a letter is an index.
+(function (SEE) {
+  'use strict';
+  const X = SEE.Strux;
+  const TK = X.TrieKit = {};
+  TK.DX = 64; TK.DY = 80; TK.R = 22;
+  const A = 'abcdefghijklmnopqrstuvwxyz';
+  TK.letter = (c) => A[c] || '?';
+
+  /** The address held by a pointer variable in frame fi (or any frame), or null */
+  const ptr = (P, name, fi) => (P.has(name, fi) && P.isSet(name, fi) ? P.val(name, fi) : null);
+  TK.ptr = ptr;
+
+  /**
+   * Capture a trie. opts: {root: name of the root pointer, cursors: names read from the newest frame,
+   *   stack: {fn, name}: that pointer in every frame of fn, newest first}
+   * Returns {root, nodes: [{addr, end, freed, kids: [{c, addr}], letter, parent, word}], cursors, stack}
+   */
+  TK.capture = function (P, opts) {
+    const out = { root: null, nodes: [], cursors: {}, stack: [] };
+    const rootName = opts.root || 'root';
+    out.root = ptr(P, rootName);
+    for (const n of opts.cursors || []) out.cursors[n] = ptr(P, n, 0);
+    if (opts.stack) P.frames.forEach((f, fi) => { if (f.name === opts.stack.fn) out.stack.push(ptr(P, opts.stack.name, fi)); });
+    let t = P.pointee(rootName);
+    for (const n of opts.cursors || []) if (!t) t = P.pointee(n);
+    if (!t) return out;
+    const nodes = new Map();
+    const queue = [out.root].concat(P.blocksOf(t));
+    for (const p of Object.values(out.cursors).concat(out.stack)) if (p && P.freed(p)) queue.push(p);
+    while (queue.length && nodes.size < 200) {
+      const p = queue.shift();
+      if (!p || nodes.has(p) || !P.vm.mem.mapped(p)) continue;
+      const f = P.fields(t, p);
+      const node = { addr: p, end: f.end, freed: P.freed(p), kids: [] };
+      (f.child || []).forEach((q, c) => { if (q) node.kids.push({ c, addr: q }); });
+      nodes.set(p, node);
+      if (!node.freed) for (const k of node.kids) queue.push(k.addr);
+    }
+    for (const n of nodes.values()) for (const k of n.kids) { const m = nodes.get(k.addr); if (m && !n.freed) { m.letter = TK.letter(k.c); m.parent = n.addr; } }
+    for (const n of nodes.values()) {
+      let w = '', p = n, guard = 0;
+      while (p && p.letter && guard++ < 40) { w = p.letter + w; p = nodes.get(p.parent); }
+      n.word = w;
+      n.inTree = !!p && p.addr === out.root;
+    }
+    out.nodes = [...nodes.values()];
+    return out;
+  };
+
+  TK.byAddr = (data) => new Map(data.nodes.map((n) => [n.addr, n]));
+  /** The words stored in the trie (or under one node), in alphabetical order */
+  TK.words = function (data, from) {
+    const by = TK.byAddr(data);
+    const out = [];
+    const go = (a, d) => { const n = by.get(a); if (!n || n.freed || d > 30) return; if (n.end && n.letter) out.push(n.word); for (const k of n.kids) go(k.addr, d + 1); };
+    go(from || data.root, 0);
+    return out;
+  };
+  /** The node reached by following a string from the root, or null */
+  TK.find = function (data, s) {
+    const by = TK.byAddr(data);
+    let n = by.get(data.root);
+    for (const ch of s) { if (!n) return null; const k = n.kids.find((x) => TK.letter(x.c) === ch); n = k ? by.get(k.addr) : null; }
+    return n || null;
+  };
+
+  /**
+   * Positions: leaves take the next free column, a parent sits over the middle of its children,
+   * depth gives the row. Nodes not hanging from the root (just freed) sit where they were last drawn.
+   */
+  TK.layout = function (ctx, data, opts) {
+    opts = opts || {};
+    const by = TK.byAddr(data);
+    const dx = opts.dx || TK.DX, dy = opts.dy || TK.DY;
+    const x0 = opts.x0 || 0, y0 = opts.y0 || 0;
+    const pos = new Map();
+    let col = 0;
+    const visit = (a, d) => {
+      const n = by.get(a);
+      if (!n || d > 30 || pos.has(a)) return null;
+      const kids = n.freed ? [] : n.kids.slice().sort((p, q) => p.c - q.c);
+      const xs = [];
+      for (const k of kids) { const r = visit(k.addr, d + 1); if (r !== null) xs.push(r); }
+      const x = xs.length ? (xs[0] + xs[xs.length - 1]) / 2 : x0 + (col++) * dx;
+      pos.set(a, { x, y: y0 + d * dy, depth: d });
+      return x;
+    };
+    if (data.root) visit(data.root, 0);
+    const last = ctx.memo['trPos' + (opts.id || '')] || new Map();
+    for (const n of data.nodes) if (!pos.has(n.addr)) pos.set(n.addr, last.get(n.addr) || { x: x0 + (col++) * dx, y: y0 + dy, depth: 1, off: true });
+    ctx.memo['trPos' + (opts.id || '')] = pos;
+    return pos;
+  };
+
+  /**
+   * The picture: nodes and child links. opts: {nodeCls(n), edgeCls(parent, child), sub(n) -> text under
+   *   the node (default: the word, for nodes that end one), rootLabel, exit}
+   */
+  TK.picture = function (ctx, data, opts) {
+    opts = opts || {};
+    const pos = opts.pos || TK.layout(ctx, data, opts);
+    const by = TK.byAddr(data);
+    const prev = ctx.prev && ctx.prev.data && ctx.prev.data.nodes ? TK.byAddr(ctx.prev.data) : null;
+    const items = [];
+    for (const n of data.nodes) {
+      const p = pos.get(n.addr);
+      if (!p) continue;
+      const isRoot = n.addr === data.root;
+      const isNew = prev && !prev.has(n.addr);
+      const sub = opts.sub ? opts.sub(n) : n.end && !isRoot ? n.word : '';
+      items.push({
+        key: 'tn' + n.addr, kind: 'vertex', x: p.x, y: p.y, r: TK.R, text: isRoot ? (opts.rootLabel || 'root') : n.letter || '', sub: sub || '',
+        cls: (isRoot ? 'tr-root ' : '') + (n.end && !isRoot ? 'tr-end ' : 'tr-plain ') + (n.freed ? 'tr-dead ' : '') + (opts.nodeCls ? opts.nodeCls(n) || '' : ''),
+        enter: isNew ? 'drop' : 'fade', exit: opts.exit || 'fall', pick: true, title: (n.word ? '"' + n.word + '"' : 'root') + ' at ' + X.hex(n.addr),
+      });
+      if (n.freed) continue;
+      for (const k of n.kids) {
+        if (!pos.has(k.addr) || !by.has(k.addr)) continue;
+        const changed = prev && prev.has(n.addr) && !prev.get(n.addr).kids.some((x) => x.addr === k.addr);
+        items.push({ key: 'te' + k.addr, kind: 'arrow', from: { key: 'tn' + n.addr }, to: { key: 'tn' + k.addr }, cls: 'tree-edge' + (changed ? ' tr-new' : '') + (opts.edgeCls ? ' ' + (opts.edgeCls(n, by.get(k.addr)) || '') : '') });
+      }
+    }
+    return { items, pos, by };
+  };
+
+  /** The 26 child pointers of one node as two rows of slots (a-m, n-z); probe is the slot looked at */
+  TK.STRIP_W = 13 * 24;
+  TK.strip = function (node, probe, o) {
+    o = o || {};
+    const x0 = o.x || 0, y0 = o.y || 0, w = 22, gap = 2;
+    const items = [];
+    const on = new Set(node ? node.kids.map((k) => k.c) : []);
+    for (let c = 0; c < 26; c++) {
+      const row = c < 13 ? 0 : 1, col = c % 13;
+      items.push({ key: 'ts' + c, kind: 'cell', x: x0 + col * (w + gap), y: y0 + row * 30, w, h: 24, text: A[c], sub: '', cls: 'tr-slot' + (on.has(c) ? ' tr-on' : '') + (c === probe ? ' tr-probe' : '') });
+    }
+    items.push({ key: 'tsl', kind: 'text', x: x0 - 10, y: y0 + 32, text: o.label || 'child[]', cls: 'hp-code', anchor: 'end' });
+    if (probe !== null && probe !== undefined && probe >= 0) items.push({ key: 'tsp', kind: 'text', x: x0 + TK.STRIP_W + 10, y: y0 + 32, text: 'child[' + probe + ']', cls: 'hp-hot' });
+    return items;
+  };
+
+  /** A free place one row below p (for a child that is not there): no node within reach of it */
+  TK.freeSpot = function (pos, p) {
+    const y = p.y + TK.DY;
+    for (const f of [0.6, -0.6, 1.3, -1.3, 2, -2, 2.7, -2.7, 3.4]) {
+      const x = p.x + f * TK.DX;
+      if (![...pos.values()].some((q) => Math.abs(q.y - y) < TK.DY / 2 && Math.abs(q.x - x) < TK.DX * 0.8)) return { x, y };
+    }
+    return { x: p.x + 4 * TK.DX, y };
+  };
+  /** A word as letter tiles; i is the current position */
+  TK.tiles = function (word, i, o) {
+    o = o || {};
+    const x0 = o.x || 0, y0 = o.y || 0, w = 34, gap = 4;
+    const items = [];
+    for (let k = 0; k < word.length; k++) {
+      items.push({ key: (o.key || 'tw') + k, kind: 'cell', x: x0 + k * (w + gap), y: y0, w, h: w, text: word[k], sub: o.noIndex ? '' : String(k), cls: 'tr-tile ' + (o.cls ? o.cls(k) || '' : k < i ? 'done' : k === i ? 'focus' : '') });
+    }
+    if (o.label) items.push({ key: (o.key || 'tw') + 'L', kind: 'text', x: x0 - 10, y: y0 + 23, text: o.label, cls: 'hp-code', anchor: 'end' });
+    return items;
+  };
+
+  /** Parse and check a list of words: lowercase a-z, at most max words of at most len letters */
+  TK.parseWords = (text) => String(text || '').trim().split(/[\s,]+/).filter(Boolean);
+  TK.checkWords = function (text, max, len, label) {
+    const w = TK.parseWords(text);
+    if (w.length > max) return label + ': at most ' + max + ' words, so the trie stays readable';
+    for (const x of w) {
+      if (!/^[a-z]+$/.test(x)) return label + ': only the lowercase letters a to z ("' + x + '" has something else)';
+      if (x.length > len) return label + ': at most ' + len + ' letters per word ("' + x + '" is longer)';
+    }
+    return null;
+  };
+})(SEE);
+
 // ==== topics/arr-1.js ====
 // Static arrays: the family (a fixed int a[CAP] and a count n), traversal, insertion, deletion, reversal,
 // rotation by three reversals, and merging two sorted arrays.
@@ -32602,6 +32781,560 @@ void delete(struct node **t, int key)
       { q: 'Which child is rotated up?', options: ['Always the left', 'The one with the smaller key', 'The one with the bigger priority', 'The one with fewer children'], answer: 2, why: 'It becomes the parent of the other child, so its priority must be the bigger one.' },
       { q: 'When does the sinking stop?', options: ['After one rotation', 'When the node has no children', 'When it reaches depth log n', 'When its priority is smallest'], answer: 1, why: 'A leaf can be cut off by setting one link to NULL.' },
       { q: 'If the node has only one child...', options: ['That child is rotated up', 'The node is freed at once', 'An error', 'Nothing happens'], answer: 0, why: 'This code still rotates; many versions splice the single child straight in, which has the same result.' },
+    ],
+  });
+})(SEE);
+
+// ==== topics/trie-1.js ====
+// Tries: the family, insert and search. A word is a path from the root, one letter per level; the
+// letter itself is the index of the child pointer to follow, so no comparisons with other words.
+(function (SEE) {
+  'use strict';
+  const X = SEE.Strux, TK = X.TrieKit;
+
+  X.family({
+    id: 'trie', order: 2, group: 'Heaps and tries', title: 'Tries',
+    blurb: 'A tree of letters: every word is a path from the root, and words that share a beginning share the nodes for it. A flag marks where a word ends.',
+    head: `#include <stdio.h>
+#include <stdlib.h>
+
+#define ALPHA 26    /* the letters 'a' to 'z' */
+
+/* a trie node: one child pointer per letter, and a flag for "a word ends here" */
+struct trie {
+    struct trie *child[ALPHA];
+    int end;
+};
+
+/* a node with no children that ends no word */
+struct trie *new_node(void)
+{
+    struct trie *t = malloc(sizeof *t);
+    int c;
+    for (c = 0; c < ALPHA; c++)
+        t->child[c] = NULL;
+    t->end = 0;
+    return t;
+}
+
+/* main uses this to put your words in before the animation starts */
+void add(struct trie *root, const char *word)
+{
+    for (; *word != '\\0'; word++) {
+        if (root->child[*word - 'a'] == NULL)
+            root->child[*word - 'a'] = new_node();
+        root = root->child[*word - 'a'];
+    }
+    root->end = 1;
+}`,
+  });
+
+  /** main: make the root, add the words quietly, then the topic's call */
+  X.trieMain = (words, call) => {
+    const w = TK.parseWords(words);
+    return `int main(void)
+{
+${w.length ? '    const char *words[] = { ' + w.map((x) => '"' + x + '"').join(', ') + ' };\n' : ''}    struct trie *root = new_node();
+${w.length ? '    int i;\n    for (i = 0; i < ' + w.length + '; i++)\n        add(root, words[i]);\n' : ''}    ${call}
+    return 0;
+}`;
+  };
+  X.trieWords = (def) => ({ id: 'words', kind: 'text', label: 'Words already in the trie', def, check: (v) => TK.checkWords(v, 8, 8, 'Words') });
+  X.trieWord = (id, label, def, allowEmpty) => ({ id, kind: 'text', label, def, check: (v) => {
+    const s = String(v || '').trim();
+    if (!s && !allowEmpty) return label + ': give a word';
+    if (s && !/^[a-z]+$/.test(s)) return label + ': one word, lowercase letters a to z only';
+    if (s.length > 8) return label + ': at most 8 letters';
+    return null;
+  } });
+  const word = (inp, id) => String(inp[id] || '').trim();
+  const q = (s) => '"' + s + '"';
+  const plural = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
+  /** Did the search end with a node whose end flag is set? (read just before search returned) */
+  const found = (ts) => { const k = ts.findIndex((t) => t.tag === 'result'); if (k < 1) return false; const d = ts[k - 1].data; const n = TK.byAddr(d).get(d.cursors.cur); return !!(n && n.end); };
+
+  // ---- insert ----------------------------------------------------------------------------------------------
+  X.topic({
+    id: 'trie-insert', family: 'trie', order: 10, title: 'Insert a word',
+    blurb: 'The letters walk down from the root. Where a letter\'s child already exists the path is shared; where it is missing a new node is made. The last node gets the end flag.',
+    code: `/* add word to the trie, making the nodes that are missing */
+void insert(struct trie *root, const char *word)
+{
+    struct trie *cur = root;                         /*@ start */
+    int i, c;
+    for (i = 0; word[i] != '\\0'; i++) {              /*@ next */
+        c = word[i] - 'a';                           /*@ letter */
+        if (cur->child[c] == NULL)                   /*@ test-key */
+            cur->child[c] = new_node();              /*@ make */
+        cur = cur->child[c];                         /*@ step */
+    }
+    cur->end = 1;                                    /*@ mark */
+}`,
+    animate: ['insert'], quiet: ['new_node'],
+    inputs: [X.trieWords('car cart cat dog'), X.trieWord('word', 'Insert', 'care')],
+    presets: [
+      { label: 'Shares a prefix', values: { words: 'car cart cat dog', word: 'care' } },
+      { label: 'All new letters', values: { words: 'car cart cat dog', word: 'sun' } },
+      { label: 'A prefix of a word already there', values: { words: 'cart card dog', word: 'car' } },
+      { label: 'Into an empty trie', values: { words: '', word: 'tea' } },
+    ],
+    counters: ['compares', 'follows', 'allocs'],
+    main: (inp) => X.trieMain(inp.words, 'insert(root, ' + q(word(inp, 'word')) + ');'),
+    capture: (P) => Object.assign(TK.capture(P, { root: 'root', cursors: ['cur'] }), { i: TK.ptr(P, 'i', 0), c: TK.ptr(P, 'c', 0) }),
+    scene(ctx) {
+      const d = ctx.tick.data, tag = ctx.tick.tag, w = word(ctx.input, 'word'), memo = ctx.memo;
+      const first = TK.byAddr(ctx.ticks[0].data);
+      const cur = d.cursors.cur;
+      memo.path = memo.path || [];
+      if (cur && !memo.path.includes(cur)) memo.path.push(cur);
+      if (tag === 'make') memo.made = (memo.made || 0) + 1;
+      const path = new Set(memo.path);
+      const inLoop = d.i !== null && tag !== 'after';
+      const i = d.i;
+      // the frame for new_node() is taken just before the pointer is stored: the new node waits beside
+      // cur, and a dashed arrow shows the link about to be made
+      const pos = TK.layout(ctx, d, {});
+      const orphan = tag === 'make' ? d.nodes.find((n) => !n.inTree && !n.freed && n.addr !== d.root) : null;
+      if (orphan && pos.get(cur)) { const p = pos.get(cur); pos.set(orphan.addr, { x: p.x + TK.DX * 1.2, y: p.y + TK.DY * 0.6, depth: p.depth + 1 }); orphan.letter = w[i]; }
+      const pic = TK.picture(ctx, d, {
+        pos,
+        nodeCls: (n) => (n.addr === cur && tag !== 'after' ? 'tr-cur' : '') + (!first.has(n.addr) && !n.end ? ' tr-new' : path.has(n.addr) ? ' tr-path' : ''),
+        edgeCls: (p, c) => (path.has(p.addr) && path.has(c.addr) ? 'tr-path' : ''),
+      });
+      const items = pic.items;
+      const by = pic.by;
+      if (orphan) items.push({ key: 'te' + orphan.addr, kind: 'arrow', from: { key: 'tn' + cur }, to: { key: 'tn' + orphan.addr }, cls: 'hot' });
+      // the word, letter by letter, above the tree
+      const tw = w.length * 38;
+      const tx = -tw / 2 + (pic.pos.get(d.root) ? pic.pos.get(d.root).x : 0);
+      items.push(...TK.tiles(w, inLoop ? i : tag === 'mark' || tag === 'after' ? w.length : -1, { x: tx, y: -230, label: 'word' }));
+      if (inLoop && i < w.length) items.push({ key: 'tci', kind: 'cursor', at: 'tw' + i, side: 'above', text: 'i', cls: 'c-teal' });
+      // the 26 child pointers of the current node: a letter is an index, not something to search for
+      const node = by.get(cur);
+      const probe = ['letter', 'test-key', 'make'].includes(tag) ? d.c : null;
+      if (node && inLoop && i < w.length) {
+        items.push(...TK.strip(node, probe, { x: -TK.STRIP_W / 2 + (pic.pos.get(d.root) ? pic.pos.get(d.root).x : 0), y: -150, label: 'cur->child[]' }));
+      }
+      // the letter on its way down, beside the node it stands at
+      const at = cur && pic.pos.get(cur);
+      if (at && inLoop && i < w.length) items.push({ key: 'tok', kind: 'token', x: at.x - TK.R - 20, y: at.y, r: 15, text: w[i], cls: 'tr-letter' });
+      const sofar = (k) => w.slice(0, k);
+      const shares = (pre) => TK.words(ctx.ticks[0].data).filter((x) => x.startsWith(pre) && x !== pre);
+      let say = '';
+      switch (tag) {
+        case 'enter': say = 'insert(root, ' + q(w) + '): walk down from the root one letter at a time. Where the path already exists it is shared; where it stops, new nodes carry it on.'; break;
+        case 'start': say = 'cur = root. The root holds no letter: its 26 child pointers lead to the words that start with a, b, c... z.'; break;
+        case 'next': say = i < w.length ? 'i = ' + i + ': the next letter is word[' + i + '] = \'' + w[i] + '\'.' : 'word[' + i + '] is \'\\0\': all ' + w.length + ' letters are placed, and cur is the node for ' + q(w) + '.'; break;
+        case 'letter': say = 'c = \'' + w[i] + '\' - \'a\' = ' + d.c + '. The letter is the index: child[' + d.c + '] is the only pointer worth looking at, with no search through the other letters.'; break;
+        case 'test-key': {
+          const has = node && node.kids.some((k) => k.c === d.c);
+          const sh = shares(sofar(i + 1));
+          say = has ? 'cur->child[' + d.c + '] is not NULL: a node for ' + q(sofar(i + 1)) + ' already exists' + (sh.length ? ', shared with ' + sh.join(', ') : '') + '. No new node is needed.' : 'cur->child[' + d.c + '] is NULL: no word so far starts with ' + q(sofar(i + 1)) + ', so a node must be made.';
+          break;
+        }
+        case 'make': say = 'new_node() makes a node with 26 NULL children and end = 0, and cur->child[' + d.c + '] is set to point to it: the node for ' + q(sofar(i + 1)) + '.'; break;
+        case 'step': say = 'cur moves down to the node for ' + q(sofar(i + 1)) + '.'; break;
+        case 'mark': say = (node && ctx.prev && TK.byAddr(ctx.prev.data).get(cur) && TK.byAddr(ctx.prev.data).get(cur).end ? 'end was already 1: ' + q(w) + ' was in the trie before. ' : '') + 'cur->end = 1: a word ends here. Without this flag the path ' + q(w) + ' would only be the beginning of other words.'; break;
+        case 'after': { const ws = TK.words(d); say = 'The trie holds ' + plural(ws.length, 'word') + ': ' + ws.join(', ') + '. Inserting ' + q(w) + ' made ' + plural(memo.made || 0, 'new node') + ' and took ' + w.length + ' steps, however many words the trie holds.'; break; }
+      }
+      return { items, say, slow: tag === 'make' || tag === 'mark' };
+    },
+    predict: [
+      { at: (t) => t.tag === 'start', once: true, ask: 'How many new nodes will this insert make?', options: (ts, i, ctx) => { const o = []; for (let k = 0; k <= word(ctx.input, 'word').length; k++) o.push(String(k)); return o; }, answer: (ts) => String(ts.filter((t) => t.tag === 'make').length), pick: 'option', explain: () => 'One for each letter after the longest beginning the word shares with words already there.' },
+      { at: (t) => t.tag === 'letter', once: true, ask: (t, ts, i, ctx) => 'Does cur already have a child for \'' + word(ctx.input, 'word')[t.data.i] + '\'?', options: () => ['Yes, follow it', 'No, make one'], answer: (ts, i) => (ts[i + 2] && ts[i + 2].tag === 'make' ? 'No, make one' : 'Yes, follow it'), pick: 'option', explain: () => 'Look at child[c] in the strip: a filled slot is a pointer that is not NULL.' },
+    ],
+    quiz: [
+      { q: 'How many steps does inserting a word of length m take in a trie that holds n words?', options: ['About log n', 'About m, whatever n is', 'About n', 'About n·m'], answer: 1, why: 'One step per letter. The other words never get compared with it.' },
+      { q: 'Inserting "car" into a trie that already holds "cart" makes how many new nodes?', options: ['3', '1', '0', '4'], answer: 2, why: 'The path c-a-r exists already; only the end flag of the r node is set.' },
+      { q: 'Why does each node need the end flag?', options: ['To know where the trie stops', 'Because a word can end at a node that also has children', 'To count the letters', 'C needs it to free the node'], answer: 1, why: 'With "car" and "cart", the r node has a child (t) but is also the end of a word.' },
+      { q: 'What does c = word[i] - \'a\' give for the letter \'e\'?', options: ['5', '4', '101', 'e'], answer: 1, why: 'Letters are consecutive codes: \'e\' - \'a\' = 4, the index of the e pointer.' },
+      { q: 'What is the main cost of this trie?', options: ['Slow searches', '26 pointers in every node, most of them NULL', 'Words must be sorted first', 'It cannot hold words that share a prefix'], answer: 1, why: 'Speed is paid for with memory: each node carries a whole alphabet of pointers.' },
+    ],
+  });
+
+  // ---- search ----------------------------------------------------------------------------------------------
+  X.topic({
+    id: 'trie-search', family: 'trie', order: 20, title: 'Search for a word',
+    blurb: 'Follow one pointer per letter. Falling off the trie means the word is not there; reaching the last letter is not enough either: the end flag must be set.',
+    code: `/* 1 if word was inserted, 0 if not */
+int search(const struct trie *root, const char *word)
+{
+    const struct trie *cur = root;                   /*@ start */
+    int i;
+    for (i = 0; word[i] != '\\0'; i++) {              /*@ next */
+        cur = cur->child[word[i] - 'a'];             /*@ step */
+        if (cur == NULL)                             /*@ test */
+            return 0;                                /*@ missing */
+    }
+    return cur->end;                                 /*@ result */
+}`,
+    animate: ['search'],
+    inputs: [X.trieWords('car card care cart cat dog'), X.trieWord('word', 'Search for', 'cart')],
+    presets: [
+      { label: 'Found', values: { words: 'car card care cart cat dog', word: 'cart' } },
+      { label: 'Falls off the trie', values: { words: 'car card care cart cat dog', word: 'cap' } },
+      { label: 'Only a prefix, not a word', values: { words: 'car card care cart cat dog', word: 'ca' } },
+      { label: 'Longer than any word', values: { words: 'car card care cart cat dog', word: 'carts' } },
+    ],
+    counters: ['follows'],
+    main: (inp) => X.trieMain(inp.words, 'printf("%d\\n", search(root, ' + q(word(inp, 'word')) + '));'),
+    capture: (P) => Object.assign(TK.capture(P, { root: 'root', cursors: ['cur'] }), { i: TK.ptr(P, 'i', 0), curSet: P.has('cur', 0) && P.isSet('cur', 0) }),
+    scene(ctx) {
+      const d = ctx.tick.data, tag = ctx.tick.tag, w = word(ctx.input, 'word'), memo = ctx.memo;
+      const cur = d.cursors.cur, i = d.i;
+      memo.path = memo.path || [];
+      if (cur && !memo.path.includes(cur)) memo.path.push(cur);
+      if (cur) memo.last = cur;
+      const path = new Set(memo.path);
+      if ((tag === 'test' && !cur && d.curSet)) memo.fell = { from: memo.path[memo.path.length - 1], i };
+      const result = tag === 'result' || (tag === 'after' && !memo.fell);
+      const lastNode = TK.byAddr(d).get(memo.last);
+      const pic = TK.picture(ctx, d, {
+        nodeCls: (n) => (n.addr === cur && tag !== 'after' ? 'tr-cur' : '') + (path.has(n.addr) ? ' tr-path' : '') + (result && n.addr === memo.last && !n.end ? ' bad' : ''),
+        edgeCls: (p, c) => (path.has(p.addr) && path.has(c.addr) ? 'tr-path' : ''),
+      });
+      const items = pic.items;
+      const rootX = pic.pos.get(d.root) ? pic.pos.get(d.root).x : 0;
+      // the word: letters matched so far turn green, the one that failed turns red
+      const matched = memo.fell ? memo.fell.i : Math.min(memo.path.length - 1, w.length);
+      items.push(...TK.tiles(w, -1, { x: rootX - w.length * 19, y: -150, label: 'word', cls: (k) => (k < matched ? 'done' : memo.fell && k === memo.fell.i ? 'bad' : k === i && tag !== 'after' ? 'focus' : '') }));
+      if (i !== null && i < w.length && tag !== 'after' && tag !== 'missing') items.push({ key: 'tci', kind: 'cursor', at: 'tw' + i, side: 'above', text: 'i', cls: 'c-teal' });
+      // falling off: a dashed hole where the missing child would hang
+      if (memo.fell && (tag === 'test' || tag === 'missing' || tag === 'after')) {
+        const p = pic.pos.get(memo.fell.from);
+        if (p) {
+          const h = TK.freeSpot(pic.pos, p);
+          items.push({ key: 'thole', kind: 'vertex', x: h.x, y: h.y, r: 18, text: 'NULL', cls: 'tr-hole', sub: '\'' + w[memo.fell.i] + '\'', enter: 'grow' });
+          items.push({ key: 'tholeA', kind: 'arrow', from: { key: 'tn' + memo.fell.from }, to: { key: 'thole' }, cls: 'bad' });
+        }
+      }
+      const at = cur && pic.pos.get(cur);
+      if (at && i !== null && i < w.length && tag !== 'after') items.push({ key: 'tok', kind: 'token', x: at.x - TK.R - 20, y: at.y, r: 15, text: w[i], cls: 'tr-letter' });
+      if (result && lastNode) {
+        const p = pic.pos.get(lastNode.addr);
+        if (p) items.push({ key: 'tres', kind: 'text', x: rootX + w.length * 19 + 24, y: -127, text: lastNode.end ? '✓ end = 1: found' : '✗ end = 0: not a word', cls: lastNode.end ? 'hp-good' : 'hp-badt' });
+      }
+      const pre = (k) => q(w.slice(0, k));
+      let say = '';
+      switch (tag) {
+        case 'enter': say = 'search(root, ' + q(w) + '): one pointer per letter, from the root down. The other words are never looked at.'; break;
+        case 'start': say = 'cur = root.'; break;
+        case 'next': say = i < w.length ? 'i = ' + i + ': follow the pointer for \'' + w[i] + '\', child[' + (w.charCodeAt(i) - 97) + '].' : 'All ' + w.length + ' letters followed: cur is the node for ' + q(w) + '. But is it the end of a word?'; break;
+        case 'step': say = cur ? 'cur = cur->child[' + (w.charCodeAt(i) - 97) + ']: down to the node for ' + pre(i + 1) + '.' : 'cur = cur->child[' + (w.charCodeAt(i) - 97) + '], and that pointer is NULL: no stored word starts with ' + pre(i + 1) + '.'; break;
+        case 'test': say = cur ? 'cur is not NULL, so the path goes on.' : 'cur is NULL: the search has fallen off the trie.'; break;
+        case 'missing': say = 'return 0: ' + q(w) + ' is not in the trie. It took ' + plural(i + 1, 'step') + ' to be sure.'; break;
+        case 'result': say = lastNode && lastNode.end ? 'return cur->end, which is 1: ' + q(w) + ' was inserted as a word.' : 'return cur->end, which is 0. The path ' + q(w) + ' exists, but only because longer words (' + TK.words(d, memo.last).join(', ') + ') pass through it. ' + q(w) + ' itself was never inserted.'; break;
+        case 'after': say = 'main prints ' + (memo.fell ? 0 : lastNode && lastNode.end ? 1 : 0) + '. A search costs one step per letter of the word, at most ' + w.length + ' here, no matter how many words are stored.'; break;
+      }
+      return { items, say, slow: tag === 'result' || tag === 'missing' };
+    },
+    predict: [
+      { at: (t) => t.tag === 'start', once: true, ask: 'Will the search find the word?', options: () => ['Found (prints 1)', 'Not found (prints 0)'], answer: (ts) => (found(ts) ? 'Found (prints 1)' : 'Not found (prints 0)'), pick: 'option', explain: () => 'Found needs two things: the path for every letter, and the end flag on the last node.' },
+      { at: (t) => t.tag === 'next' && t.data.i === 1, once: true, ask: 'Click the node the search will move to next.', answer: (ts, i) => { const n = ts.slice(i + 1).find((t) => t.tag === 'step'); return n && n.data.cursors.cur ? 'tn' + n.data.cursors.cur : null; }, explain: (ts, i, ctx) => 'The child for the letter \'' + word(ctx.input, 'word')[1] + '\' of the current node.' },
+    ],
+    quiz: [
+      { q: 'The trie holds "cart" only. What does search for "car" return?', options: ['1', '0', 'It crashes', 'The node for r'], answer: 1, why: 'The path exists, but the r node\'s end flag is 0: "car" was never inserted.' },
+      { q: 'When does a trie search stop early?', options: ['When a letter\'s child pointer is NULL', 'When it finds a bigger word', 'Never', 'After log n steps'], answer: 0, why: 'A NULL child means no stored word continues with that letter.' },
+      { q: 'How does the time to search depend on the number of words stored?', options: ['Linearly', 'Logarithmically', 'It does not: only the length of the word matters', 'Quadratically'], answer: 2, why: 'Each step follows one pointer chosen by the letter, so the cost is the word\'s length.' },
+      { q: 'Searching for "carts" when the trie has "cart": where does it stop?', options: ['At t, returning 1', 'After t, when child[\'s\' - \'a\'] is NULL', 'At the root', 'At r'], answer: 1, why: 'The t node has no s child, so the search falls off and returns 0.' },
+    ],
+  });
+})(SEE);
+
+// ==== topics/trie-2.js ====
+// Tries: listing the words with a prefix (walk down, then a depth-first walk below) and deleting a
+// word (clear its flag, then free the nodes that lead nowhere, from the bottom up).
+(function (SEE) {
+  'use strict';
+  const X = SEE.Strux, TK = X.TrieKit;
+  const word = (inp, id) => String(inp[id] || '').trim();
+  const q = (s) => '"' + s + '"';
+  const plural = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
+
+  /** The letters in buf[0..len-1], wherever buf lives (an array in one frame, a pointer in another) */
+  const bufText = (P, len) => {
+    const v = P.find('buf');
+    if (!v || len === null || len < 0) return '';
+    const t = SEE.Types.unqual(v.type);
+    const addr = t.k === 'ptr' ? P.read(t, v.addr) : v.addr;
+    let s = '';
+    for (let k = 0; k < len && k < 16; k++) { const c = P.vm.mem.peek(1, addr + k); s += c >= 97 && c <= 122 ? String.fromCharCode(c) : '?'; }
+    return s;
+  };
+
+  // ---- words with a prefix ---------------------------------------------------------------------------------
+  X.topic({
+    id: 'trie-prefix', family: 'trie', order: 30, title: 'All words with a prefix',
+    blurb: 'Walk down to the node for the prefix: every word that starts with it lives in the subtree below. A depth-first walk of that subtree spells them out, letter by letter, in alphabetical order.',
+    code: `/* the first letter at or after c that has a child, or ALPHA if none */
+int next_child(const struct trie *t, int c)
+{
+    while (c < ALPHA && t->child[c] == NULL)
+        c++;
+    return c;
+}
+
+/* print every word under t; buf[0..depth-1] spells the path to t */
+int collect(const struct trie *t, char buf[], int depth)
+{
+    int c, count = t->end;                           /*@ visit */
+    if (t->end) {                                    /*@ test-end */
+        buf[depth] = '\\0';                           /*@ cut */
+        printf("%s\\n", buf);                         /*@ found */
+    }
+    for (c = next_child(t, 0); c < ALPHA; c = next_child(t, c + 1)) {   /*@ child */
+        buf[depth] = 'a' + c;                        /*@ push */
+        count += collect(t->child[c], buf, depth + 1);   /*@ descend */
+    }
+    return count;                                    /*@ return */
+}
+
+/* how many stored words start with prefix (they are printed too) */
+int with_prefix(const struct trie *root, const char *prefix)
+{
+    const struct trie *cur = root;                   /*@ start */
+    char buf[16];
+    int i;
+    for (i = 0; prefix[i] != '\\0'; i++) {            /*@ next */
+        buf[i] = prefix[i];                          /*@ copy */
+        cur = cur->child[prefix[i] - 'a'];           /*@ step */
+        if (cur == NULL)                             /*@ test */
+            return 0;                                /*@ none */
+    }
+    return collect(cur, buf, i);                     /*@ collect */
+}`,
+    animate: ['with_prefix'], quiet: ['next_child'],
+    inputs: [X.trieWords('car card care cart cat do dog'), X.trieWord('prefix', 'Prefix', 'car', true)],
+    presets: [
+      { label: 'A prefix that is a word too', values: { words: 'car card care cart cat do dog', prefix: 'car' } },
+      { label: 'A short prefix', values: { words: 'car card care cart cat do dog', prefix: 'd' } },
+      { label: 'No word has it', values: { words: 'car card care cart cat do dog', prefix: 'cow' } },
+      { label: 'Empty prefix: every word', values: { words: 'cat cow do dog', prefix: '' } },
+    ],
+    counters: ['follows'],
+    main: (inp) => X.trieMain(inp.words, 'printf("%d words\\n", with_prefix(root, ' + q(word(inp, 'prefix')) + '));'),
+    capture(P) {
+      const o = TK.capture(P, { root: 'root', cursors: ['cur'], stack: { fn: 'collect', name: 't' } });
+      const fn = P.frames[0].name;
+      o.fn = fn;
+      o.i = fn === 'with_prefix' ? TK.ptr(P, 'i', 0) : null;
+      o.depth = fn === 'collect' ? TK.ptr(P, 'depth', 0) : null;
+      o.count = fn === 'collect' ? TK.ptr(P, 'count', 0) : null;
+      o.c = fn === 'collect' ? TK.ptr(P, 'c', 0) : null;
+      // the letters spelled so far: up to depth (plus the one just pushed)
+      const len = fn === 'collect' ? o.depth + 1 : o.i !== null ? o.i + 1 : 0;
+      o.buf = bufText(P, len);
+      o.str = fn === 'collect' && o.depth !== null ? P.str(P.val('buf'), o.depth + 1) : '';
+      return o;
+    },
+    scene(ctx) {
+      const d = ctx.tick.data, tag = ctx.tick.tag, pre = word(ctx.input, 'prefix'), memo = ctx.memo;
+      memo.out = memo.out || [];
+      memo.seen = memo.seen || new Set();
+      if (tag === 'found' && !memo.out.includes(d.str)) memo.out.push(d.str);
+      const inCollect = d.fn === 'collect';
+      const t = inCollect ? d.stack[0] : null;
+      if (t) memo.seen.add(t);
+      if (d.cursors.cur) memo.preNode = d.cursors.cur;
+      if (tag === 'none') memo.none = true;
+      // where the walk down stopped: the node for the prefix
+      const preNode = inCollect || tag === 'collect' || tag === 'after' ? memo.preNode : null;
+      const stack = new Set(d.stack);
+      const below = preNode ? new Set(TK.words(d, preNode)) : new Set();
+      const pic = TK.picture(ctx, d, {
+        nodeCls: (n) => (n.addr === t ? 'tr-cur' : stack.has(n.addr) ? 'tr-stack' : !inCollect && n.addr === d.cursors.cur && tag !== 'after' ? 'tr-cur' : memo.seen.has(n.addr) ? 'tr-path' : ''),
+        edgeCls: (p, c) => (stack.has(p.addr) && stack.has(c.addr) ? 'tr-stack' : ''),
+      });
+      const items = pic.items;
+      // the subtree that holds every answer, shaded
+      if (preNode && pic.pos.get(preNode)) {
+        const sub = [];
+        const by = pic.by;
+        const go = (a) => { const n = by.get(a); if (!n) return; sub.push(pic.pos.get(a)); for (const k of n.kids) go(k.addr); };
+        go(preNode);
+        const xs = sub.filter(Boolean).map((p) => p.x), ys = sub.filter(Boolean).map((p) => p.y);
+        const x0 = Math.min(...xs) - 36, x1 = Math.max(...xs) + 36, y0 = Math.min(...ys) - 36, y1 = Math.max(...ys) + 52;
+        items.unshift({ key: 'tsub', kind: 'region', x: x0, y: y0, w: x1 - x0, h: y1 - y0, cls: 'tr-sub', text: '' });
+        items.push({ key: 'tsubT', kind: 'text', x: (x0 + x1) / 2, y: y1 + 20, text: pre ? 'every word starting ' + q(pre) : 'every word', cls: 'hp-note', anchor: 'middle' });
+      }
+      const rootX = pic.pos.get(d.root) ? pic.pos.get(d.root).x : 0;
+      // buf: the prefix (indigo) and then the letters the walk below adds and takes away
+      if (tag === 'push') memo.pushC = d.c;
+      const len = inCollect ? (tag === 'push' ? d.depth + 1 : d.depth) : tag === 'after' ? 0 : d.i !== null ? Math.min(d.i + (tag === 'copy' || tag === 'step' || tag === 'test' || tag === 'none' ? 1 : 0), pre.length) : 0;
+      const letters = (inCollect ? d.buf : pre).slice(0, len);
+      items.push(...TK.tiles(letters, -1, { x: rootX - 150, y: -150, key: 'tb', label: 'buf', noIndex: false, cls: (k) => (k < pre.length ? 'part-b' : k === len - 1 && tag === 'push' ? 'hot' : 'part-a') }));
+      if (inCollect && d.depth !== null && tag !== 'return') items.push({ key: 'tdep', kind: 'cursor', x: rootX - 150 + d.depth * 38 + 17, y: -110, tx: rootX - 150 + d.depth * 38 + 17, ty: -84, text: 'depth', cls: 'c-violet' });
+      // the words printed so far
+      const ox = Math.max(...[...pic.pos.values()].map((p) => p.x)) + 90;
+      items.push({ key: 'touth', kind: 'text', x: ox, y: -10, text: 'printed', cls: 'hp-title' });
+      memo.out.forEach((s, k) => items.push({ key: 'tout' + s, kind: 'text', x: ox, y: 20 + k * 24, text: s, cls: 'tr-word' }));
+      const by = pic.by;
+      const nodeWord = (a) => (by.get(a) ? by.get(a).word : '');
+      const kidsOf = (a) => (by.get(a) ? by.get(a).kids.map((k) => TK.letter(k.c)).join(', ') : '');
+      let say = '';
+      const L = (c) => '\'' + TK.letter(c) + '\'';
+      switch (tag) {
+        case 'enter': say = !pre ? 'with_prefix(root, ""): every word starts with the empty prefix, so there is no walk down: the root is the starting point and the whole trie gets listed.' : 'with_prefix(root, ' + q(pre) + '): first walk down to the node for ' + q(pre) + ', as a search would. Every word that starts with it is somewhere below that node.'; break;
+        case 'start': say = 'cur = root.' + (pre ? '' : ' The prefix is empty, so the root itself is the starting point: every word will be listed.'); break;
+        case 'next': say = d.i < pre.length ? 'Prefix letter ' + d.i + ': \'' + pre[d.i] + '\'.' : 'The whole prefix is followed. cur is the node for ' + q(pre) + '.'; break;
+        case 'copy': say = 'buf[' + d.i + '] = \'' + pre[d.i] + '\': buf will spell each word as the walk goes on.'; break;
+        case 'step': say = d.cursors.cur ? 'cur moves to the node for ' + q(pre.slice(0, d.i + 1)) + '.' : 'child[\'' + pre[d.i] + '\' - \'a\'] is NULL: no word starts with ' + q(pre.slice(0, d.i + 1)) + '.'; break;
+        case 'test': say = d.cursors.cur ? 'Not NULL: keep going.' : 'cur is NULL.'; break;
+        case 'none': say = 'return 0: no stored word starts with ' + q(pre) + ', and nothing below needs to be looked at.'; break;
+        case 'collect': say = 'collect(cur, buf, ' + pre.length + '): list every word in the shaded subtree. buf already holds ' + q(pre) + '.'; break;
+        case 'visit': say = 'At the node for ' + q(nodeWord(t)) + ' (depth ' + d.depth + '). count starts at t->end = ' + d.count + (d.count ? ': a word ends right here.' : '.'); break;
+        case 'test-end': say = d.count ? q(nodeWord(t)) + ' is a word: print it before going deeper, so shorter words come first.' : q(nodeWord(t) || pre) + ' is not a word itself, only a step on the way.'; break;
+        case 'cut': say = 'buf[' + d.depth + '] = \'\\0\': end the string after ' + d.depth + ' letters, so buf reads ' + q(d.str) + '.'; break;
+        case 'found': say = 'printf prints ' + q(d.str) + '.'; break;
+        case 'child': say = ctx.ticks[ctx.i + 1] && ctx.ticks[ctx.i + 1].tag === 'child' ? (d.c === null || ctx.prev.tag === 'test-end' || ctx.prev.tag === 'found' || ctx.prev.tag === 'visit' ? 'next_child(t, 0) looks for the first letter, from \'a\' on, whose child pointer is not NULL.' : 'next_child(t, c + 1) looks for the next letter after ' + L(d.c) + ' with a child.') : d.c < 26 ? 'next_child finds the next letter that has a child: ' + L(d.c) + ' (children here: ' + kidsOf(t) + '). Letters are tried in order a to z, so the words come out sorted.' : 'No more children (c = ALPHA): every word under ' + q(nodeWord(t) || pre) + ' has been listed.'; break;
+        case 'push': say = 'buf[' + d.depth + '] = ' + L(d.c) + ': buf now spells ' + q(d.buf.slice(0, d.depth + 1)) + '.'; break;
+        case 'descend': say = 'Go down: collect(t->child[' + memo.pushC + '], buf, ' + d.depth + '), the node for ' + q(nodeWord(t)) + '. The violet nodes are the calls still waiting for it.'; break;
+        case 'return': {
+          const n = ctx.tick.ret !== undefined && ctx.tick.ret !== null ? ctx.tick.ret : d.count;
+          const parent = d.stack[1];
+          say = parent ? 'return ' + n + ': the call for ' + q(nodeWord(t)) + ' hands back ' + plural(n, 'word') + ' to the call for ' + q(nodeWord(parent) || pre) + ', which adds it to its count. The letter in buf[' + (d.depth - 1) + '] will be written over by the next child.' : 'return ' + n + ': the first call hands the total to with_prefix.';
+          break;
+        }
+        case 'after': say = memo.none ? 'main prints "0 words".' : 'main prints "' + memo.out.length + ' words": ' + memo.out.join(', ') + '. The walk down took ' + pre.length + ' steps; after that only the shaded subtree was visited, never the rest of the trie.'; break;
+        default: if (ctx.tick.end) say = ctx.tick.fn + '() returns.';
+      }
+      void below;
+      return { items, say, slow: tag === 'found' };
+    },
+    predict: [
+      { at: (t, i, ts) => t.tag === 'enter', once: true, ask: 'How many stored words start with the prefix?', options: () => ['0', '1', '2', '3', '4', '5', '6', '7', '8'], answer: (ts) => String(ts.filter((t) => t.tag === 'found').length), pick: 'option', explain: () => 'They are exactly the words in the subtree under the prefix node.' },
+      { at: (t, i, ts) => t.tag === 'child' && ts[i + 1] && ts[i + 1].tag === 'push' && ts.slice(0, i).some((x) => x.tag === 'found'), once: true, ask: 'Which word will be printed next?', options: (ts) => [...new Set(ts.filter((t) => t.tag === 'found').map((t) => t.data.str))], answer: (ts, i) => { const n = ts.slice(i + 1).find((t) => t.tag === 'found'); return n ? n.data.str : null; }, pick: 'option', explain: () => 'The walk tries letters from a to z and prints a word as soon as it reaches its end node, so words come out in alphabetical order.' },
+    ],
+    quiz: [
+      { q: 'Where are all the words that start with "ca"?', options: ['Spread over the whole trie', 'In the subtree under the node for "ca"', 'In the leaves only', 'At depth 2 only'], answer: 1, why: 'Every word starting with "ca" passes through that node, so they are all below it.' },
+      { q: 'Why do the words come out in alphabetical order?', options: ['They were inserted in order', 'Children are visited from a to z, and a word is printed before the longer ones below it', 'printf sorts them', 'By chance'], answer: 1, why: 'A depth-first walk that tries letters in order, printing at the end node first, is exactly alphabetical order.' },
+      { q: 'What does buf[depth] = \'a\' + c do before the recursive call?', options: ['Allocates a node', 'Writes the next letter of the word being spelled', 'Marks the end of a word', 'Counts the words'], answer: 1, why: 'buf holds the path so far; each level writes its letter at its own depth and the next child writes over it.' },
+      { q: 'Why is a trie good for autocomplete?', options: ['It uses little memory', 'After walking the prefix, only the words that match are ever visited', 'It keeps words sorted by length', 'It needs no pointers'], answer: 1, why: 'The prefix walk costs one step per letter, and then the subtree holds exactly the candidates.' },
+    ],
+  });
+
+  // ---- delete ----------------------------------------------------------------------------------------------
+  X.topic({
+    id: 'trie-delete', family: 'trie', order: 40, title: 'Delete a word',
+    blurb: 'Go down to the word\'s last node and clear its end flag. Then, on the way back up, free every node that no longer ends a word and has no children, until one is still needed.',
+    code: `/* 1 if t has no children */
+int no_children(const struct trie *t)
+{
+    int c;
+    for (c = 0; c < ALPHA; c++)
+        if (t->child[c] != NULL)
+            return 0;
+    return 1;
+}
+
+/* remove word from the subtree under t, where t spells word[0..depth-1];
+   returns t, or NULL if t was freed because it leads to no word any more */
+struct trie *delete_word(struct trie *t, const char *word, int depth)
+{
+    int c;
+    if (t == NULL)                                   /*@ test-null */
+        return NULL;                                 /*@ absent */
+    if (word[depth] == '\\0')                         /*@ at-end */
+        t->end = 0;                                  /*@ unmark */
+    else {
+        c = word[depth] - 'a';                       /*@ letter */
+        t->child[c] = delete_word(t->child[c], word, depth + 1);   /*@ descend */
+    }
+    if (depth > 0 && !t->end && no_children(t)) {    /*@ test-free */
+        free(t);                                     /*@ free */
+        return NULL;                                 /*@ gone */
+    }
+    return t;                                        /*@ keep */
+}`,
+    animate: ['delete_word'], quiet: ['no_children'],
+    inputs: [X.trieWords('car card care cat cattle dog'), X.trieWord('word', 'Delete', 'cattle')],
+    presets: [
+      { label: 'Its own tail is freed', values: { words: 'car card care cat cattle dog', word: 'cattle' } },
+      { label: 'A prefix of other words: only the flag', values: { words: 'car card care cat cattle dog', word: 'car' } },
+      { label: 'A whole branch goes', values: { words: 'car card care cat cattle dog', word: 'dog' } },
+      { label: 'Not in the trie', values: { words: 'car card care cat cattle dog', word: 'cow' } },
+    ],
+    counters: ['frees'],
+    main: (inp) => X.trieMain(inp.words, 'delete_word(root, ' + q(word(inp, 'word')) + ', 0);'),
+    capture(P) {
+      const o = TK.capture(P, { root: 'root', stack: { fn: 'delete_word', name: 't' } });
+      const fn = P.frames[0].name;
+      o.fn = fn;
+      o.depth = fn === 'delete_word' ? TK.ptr(P, 'depth', 0) : null;
+      o.c = fn === 'delete_word' ? TK.ptr(P, 'c', 0) : null;
+      return o;
+    },
+    scene(ctx) {
+      const d = ctx.tick.data, tag = ctx.tick.tag, w = word(ctx.input, 'word'), memo = ctx.memo;
+      const inCall = d.fn === 'delete_word';
+      const t = inCall ? d.stack[0] : null;
+      const depth = d.depth;
+      memo.freed = memo.freed || [];
+      if (tag === 'free' && t && !memo.freed.includes(t)) memo.freed.push(t);
+      if (tag === 'unmark') memo.unmarked = true;
+      if (tag === 'absent') memo.absent = depth;
+      const first = TK.byAddr(ctx.ticks[0].data);
+      const stack = new Set(d.stack.filter(Boolean));
+      const pic = TK.picture(ctx, d, {
+        nodeCls: (n) => (n.addr === t && !n.freed ? 'tr-cur' : stack.has(n.addr) ? 'tr-stack' : ''),
+        edgeCls: (p, c) => (stack.has(p.addr) && stack.has(c.addr) ? 'tr-stack' : ''),
+        sub: (n) => (n.end && n.addr !== d.root ? n.word : first.get(n.addr) && first.get(n.addr).end && !n.end ? n.word + ' ✗' : ''),
+      });
+      const items = pic.items;
+      const rootX = pic.pos.get(d.root) ? pic.pos.get(d.root).x : 0;
+      items.push(...TK.tiles(w, -1, { x: rootX - w.length * 19, y: -150, label: 'word', cls: (k) => (inCall && depth !== null ? (k < depth ? 'done' : k === depth ? 'focus' : '') : '') }));
+      if (inCall && depth !== null && depth <= w.length && tag !== 'gone' && tag !== 'keep') {
+        items.push({ key: 'tdep', kind: 'cursor', x: rootX - w.length * 19 + depth * 38 + 17, y: -112, tx: rootX - w.length * 19 + depth * 38 + 17, ty: -86, text: depth < w.length ? 'depth' : 'depth (\\0)', cls: 'c-violet' });
+      }
+      // why a node stays: it ends a word, or other words go on below it
+      const by = pic.by;
+      const node = t && by.get(t);
+      if (node && tag === 'test-free' && depth > 0) {
+        const why = node.end ? 'ends a word: keep' : node.kids.length ? (node.kids.length === 1 ? 'has a child' : 'has ' + node.kids.length + ' children') + ': keep' : 'leads nowhere: free';
+        items.push({ key: 'twhy', kind: 'text', x: rootX - w.length * 19 + w.length * 38 + 24, y: -127, text: q(node.word) + ' ' + why, cls: node.end || node.kids.length ? 'hp-good' : 'hp-badt' });
+      }
+      if (memo.absent !== undefined && (tag === 'absent' || !inCall || ['keep', 'test-free'].includes(tag))) {
+        const parent = by.get(memo.missFrom);
+        if (parent && pic.pos.get(parent.addr)) {
+          const h = TK.freeSpot(pic.pos, pic.pos.get(parent.addr));
+          items.push({ key: 'thole', kind: 'vertex', x: h.x, y: h.y, r: 18, text: 'NULL', cls: 'tr-hole', sub: '\'' + w[memo.absent - 1] + '\'' });
+          items.push({ key: 'tholeA', kind: 'arrow', from: { key: 'tn' + parent.addr }, to: { key: 'thole' }, cls: 'bad' });
+        }
+      }
+      if (tag === 'descend') memo.missFrom = d.stack[1];
+      const nm = (a) => (by.get(a) && by.get(a).word ? q(by.get(a).word) : 'the root');
+      let say = '';
+      switch (tag) {
+        case 'enter': say = 'delete_word(root, ' + q(w) + ', 0): go down letter by letter to the end of the word, then come back up. The call stack (violet) remembers the way back.'; break;
+        case 'test-null': say = t ? 'depth ' + depth + ': t is the node for ' + nm(t) + '.' : 'depth ' + depth + ': t is NULL. The word is not in the trie.'; break;
+        case 'absent': say = 'return NULL: ' + q(w.slice(0, depth)) + ' does not exist, so there is nothing to delete. The parent stores NULL in a pointer that was NULL already.'; break;
+        case 'at-end': say = depth < w.length ? 'word[' + depth + '] = \'' + w[depth] + '\': not the end of the word yet.' : 'word[' + depth + '] is \'\\0\': t is the node where ' + q(w) + ' ends.'; break;
+        case 'unmark': say = 't->end = 0: ' + q(w) + ' is no longer a word. That is the real deletion; the rest is tidying up memory.'; break;
+        case 'letter': say = 'c = \'' + w[depth] + '\' - \'a\' = ' + d.c + '.'; break;
+        case 'descend': { const pc = ctx.prev && ctx.prev.data.c; say = 'Go down: delete_word(t->child[' + pc + '], word, ' + depth + '). Whatever it returns will be stored back in t->child[' + pc + ']: the child itself, or NULL if it was freed.'; break; }
+        case 'test-free': {
+          if (!node) break;
+          if (depth === 0) { say = 'depth 0: this is the root, which is never freed.'; break; }
+          say = 'Can the node for ' + nm(t) + ' go? ' + (node.end ? 'No: it is the end of the word ' + q(node.word) + '.' : node.kids.length ? 'No: it still has a child (' + node.kids.map((k) => '\'' + TK.letter(k.c) + '\'').join(', ') + '), so other words need it.' : 'Yes: it ends no word and has no children.');
+          break;
+        }
+        case 'free': say = 'free(t): the node for ' + nm(t) + ' goes back to the heap. Its parent still points at it for a moment.'; break;
+        case 'gone': say = 'return NULL: the parent will store NULL in place of the freed node, so no pointer is left dangling.'; break;
+        case 'keep': say = memo.kept ? 'return t: this node stays too.' + (depth === 0 ? ' The root goes back to main unchanged.' : '') : 'return t: this node stays. Every node above it is on the path to it, so nothing more will be freed.'; memo.kept = true; break;
+        case 'after': say = (memo.absent !== undefined ? q(w) + ' was not in the trie: nothing changed.' : q(w) + ' is deleted. ' + plural(memo.freed.length, 'node') + ' freed.') + ' Words left: ' + (TK.words(d).join(', ') || 'none') + '.'; break;
+        default: if (ctx.tick.end) say = 'delete_word() returns.';
+      }
+      return { items, say, slow: tag === 'free' || tag === 'unmark' };
+    },
+    predict: [
+      { at: (t) => t.tag === 'enter', once: true, ask: 'How many nodes will be freed?', options: () => ['0', '1', '2', '3', '4', '5'], answer: (ts) => String(ts.filter((t) => t.tag === 'free').length), pick: 'option', explain: () => 'Only the nodes at the end of the path that end no other word and have no other children.' },
+      { at: (t, i, ts) => ts[i + 1] && ts[i + 1].tag === 'test-free' && ts[i + 1].data.depth > 0 && t.tag !== 'enter', once: true, ask: (t, ts, i) => 'Will the node for "' + (TK.byAddr(ts[i + 1].data).get(ts[i + 1].data.stack[0]) || {}).word + '" be freed?', options: () => ['Yes, freed', 'No, kept'], answer: (ts, i) => (ts[i + 2] && ts[i + 2].tag === 'free' ? 'Yes, freed' : 'No, kept'), pick: 'option', explain: () => 'A node is freed only if it ends no word and has no children left.' },
+    ],
+    quiz: [
+      { q: 'The trie holds "car" and "cart". Deleting "car" frees how many nodes?', options: ['0', '1', '3', '4'], answer: 0, why: 'The r node still leads to "cart", so only its end flag is cleared.' },
+      { q: 'Why does the freeing happen on the way back up, not on the way down?', options: ['It is faster', 'A node can only be judged after everything below it has been dealt with', 'free() needs the root', 'To keep the word sorted'], answer: 1, why: 'Whether a node has children left depends on what was freed below it, so children are handled first.' },
+      { q: 'Why does delete_word return a pointer, stored in t->child[c]?', options: ['To count the nodes', 'So the parent\'s pointer becomes NULL when the child is freed', 'To return the deleted word', 'It is needed for the root only'], answer: 1, why: 'Otherwise the parent would keep the address of freed memory: a dangling pointer.' },
+      { q: 'The trie holds "dog" only. Deleting it frees...', options: ['Only g', 'g, o and d', 'Everything including the root', 'Nothing'], answer: 1, why: 'Each of g, o, d ends no other word and has no other child once the one below is gone. The root stays.' },
     ],
   });
 })(SEE);
