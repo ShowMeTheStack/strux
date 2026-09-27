@@ -21488,6 +21488,986 @@ ${Array(inp.pops).fill('    pop_back(&v);').join('\n')}
   });
 })(SEE);
 
+// ==== topics/gorder-1.js ====
+// Graphs, order and structure: topological order (Kahn's queue, DFS finishing order) and cycle detection
+// (undirected with a parent, directed with three colours).
+(function (SEE) {
+  'use strict';
+  const X = SEE.Strux, G = X.GraphKit, GW = X.GWalk;
+  const DP = GW.dirPresets, UP = GW.undirPresets;
+
+  X.family({
+    id: 'gorder', order: 4, group: 'Graphs', title: 'Order and structure',
+    blurb: 'What a search can tell you about a graph: an order that respects every arrow, whether there is a cycle, and how it falls apart into pieces.',
+    head: `#include <stdio.h>
+
+#define MAXV 10
+
+/* adj[u][v] is 1 when there is an edge from u to v */
+int adj[MAXV][MAXV];`,
+  });
+
+  /** main: the chosen graph into adj, a few declarations, then the call */
+  const gMain = (inp, decl, call, directed) => {
+    const edges = G.parse(inp.graph);
+    return `int main(void)
+{
+    int init[MAXV][MAXV] = ${G.matrixInit(10, edges, directed).replace(/\n {8}/g, '\n        ')};
+    int i, j;${decl ? '\n    ' + decl : ''}
+    for (i = 0; i < MAXV; i++)
+        for (j = 0; j < MAXV; j++)
+            adj[i][j] = init[i][j];
+    ${call}
+    return 0;
+}`;
+  };
+  X.gwMain = gMain;
+  const layout = (inp) => { const pos = G.positions(inp.n, inp.pos); return { pos, box: GW.box(pos, 30) }; };
+  X.gwLayout = layout;
+  const dirInputs = (p, n) => GW.inputs(p.graph, p.pos, n || p.n, GW.directedOnly);
+  const undirInputs = (p, n) => GW.inputs(p.graph, p.pos, n || p.n, GW.undirectedOnly);
+  X.gwDirInputs = dirInputs; X.gwUndirInputs = undirInputs;
+
+  /** The active calls of fn as a tower of frames beside the graph */
+  const callTower = (calls, label, box, n) => GW.tower('fr', calls, {
+    x0: box.x1 + 80, y0: box.y1 - 36, w: 250, h: 36, title: 'call stack', empty: 'empty',
+    ids: calls.map((c) => 'fr' + c.args.u), text: (k, c) => label(c),
+    cls: (k) => 'gw-frame' + (k === calls.length - 1 ? ' gw-top' : ''),
+  });
+  X.gwCallTower = callTower;
+  const towerBox = (box, n) => ({ x0: box.x1 + 70, y0: Math.min(box.y0, box.y1 - 36 - (n - 1) * 40), x1: box.x1 + 340, y1: box.y1 + 30 });
+  X.gwTowerBox = towerBox;
+  /**
+   * The frame a tick belongs to. If a return line is recorded after the function has gone, its frame is
+   * the one on top in the tick before; a call line is recorded once the callee has started, so its frame is
+   * the one under the top.
+   */
+  const frameOf = (ctx, calls, retTags) => {
+    const t = ctx.tick;
+    if ((t.end || retTags.includes(t.tag)) && ctx.prev && ctx.prev.data && ctx.prev.data.calls && calls.length < ctx.prev.data.calls.length) {
+      const pc = ctx.prev.data.calls;
+      return pc.length ? pc[pc.length - 1] : null;
+    }
+    const before = ctx.prev && ctx.prev.data && ctx.prev.data.calls ? ctx.prev.data.calls.length : 0;
+    if (t.tag === 'dive' && calls.length > 1 && calls.length > before) return calls[calls.length - 2];
+    return calls.length ? calls[calls.length - 1] : null;
+  };
+  X.gwFrameOf = frameOf;
+  /** Point tree edges the way the search went */
+  const orient = (items, parent) => {
+    for (const it of items) {
+      if (it.kind !== 'arrow' || !/gw-tree/.test(it.cls)) continue;
+      const a = +it.from.key.slice(2), b = +it.to.key.slice(2);
+      if (parent[a] === b) { it.from = { key: 'gv' + b }; it.to = { key: 'gv' + a }; }
+      it.noHead = false;
+    }
+    return items;
+  };
+  X.gwOrient = orient;
+  /** A row of cells with a title on the left; keys are stable per value so cells slide between rows */
+  const row = (key, title, values, x0, y0, opts) => {
+    opts = opts || {};
+    const items = [{ key: key + 'T', kind: 'text', x: x0 - 14, y: y0 + 27, text: title, cls: 'gw-label', anchor: 'end' }];
+    if (!values.length && opts.empty) items.push({ key: key + 'E', kind: 'text', x: x0 + 4, y: y0 + 27, text: opts.empty, cls: 'gw-small' });
+    values.forEach((v, i) => items.push({ key: (opts.ids ? opts.ids(v, i) : key + v), kind: 'cell', x: x0 + i * 48, y: y0, w: 44, h: 42, text: v, sub: opts.sub ? opts.sub(v, i) : '', cls: opts.cls ? opts.cls(v, i) || '' : '', enter: opts.from ? 'fly' : 'fade', from: opts.from ? opts.from(v, i) : undefined }));
+    return items;
+  };
+  X.gwRow = row;
+
+  // ---- topological order: Kahn's algorithm --------------------------------------------------------------------
+  X.topic({
+    id: 'topo-kahn', family: 'gorder', order: 10, title: 'Topological order (Kahn)',
+    blurb: 'Count the arrows coming into each vertex. A vertex with none can go first; taking it out lowers the count of everything it points to. A cycle never reaches zero.',
+    code: `/* indeg[v] = the number of edges coming into v */
+void count_in(int n, int indeg[])
+{
+    int u, v;
+    for (v = 0; v < n; v++)
+        indeg[v] = 0;
+    for (u = 0; u < n; u++)
+        for (v = 0; v < n; v++)
+            if (adj[u][v])
+                indeg[v]++;
+}
+
+/* fill topo[] so that every edge points forwards; returns how
+   many vertices were placed (fewer than n: there is a cycle) */
+int topo_kahn(int n, int topo[])
+{
+    int indeg[MAXV], queue[MAXV];
+    int front = 0, rear = 0, done = 0;
+    int u, v;
+    count_in(n, indeg);                         /*@ count */
+    for (v = 0; v < n; v++)                     /*@ seed-loop */
+        if (indeg[v] == 0)                      /*@ seed-test */
+            queue[rear++] = v;                  /*@ seed */
+    while (front < rear) {                      /*@ loop */
+        u = queue[front++];                     /*@ take */
+        topo[done++] = u;                       /*@ place */
+        for (v = 0; v < n; v++)                 /*@ scan */
+            if (adj[u][v] && --indeg[v] == 0)   /*@ drop */
+                queue[rear++] = v;              /*@ ready */
+    }
+    return done;                                /*@ return */
+}`,
+    animate: ['topo_kahn'], quiet: ['count_in'],
+    inputs: dirInputs(DP.tangled),
+    presets: [
+      { label: 'Tangled', values: Object.assign({}, DP.tangled) },
+      { label: 'Courses', values: Object.assign({}, DP.courses) },
+      { label: 'With a cycle', values: Object.assign({}, DP.cyclic) },
+      { label: 'A chain', values: Object.assign({}, DP.chain) },
+    ],
+    counters: ['compares', 'moves'],
+    main: (inp) => gMain(inp, 'int topo[MAXV], placed;', 'placed = topo_kahn(' + inp.n + ', topo);\n    printf("%d of ' + inp.n + ' placed\\n", placed);', true),
+    capture(P) {
+      const s = (k) => (P.has(k, 0) && P.isSet(k, 0) ? P.val(k, 0) : null);
+      return { indeg: GW.ints(P, 'indeg', 10, 0), queue: GW.ints(P, 'queue', 10, 0), topo: GW.ints(P, 'topo', 10, 0), front: s('front'), rear: s('rear'), done: s('done'), u: s('u'), v: s('v'), placed: P.isSet('placed') ? P.val('placed') : null };
+    },
+    scene(ctx) {
+      const tag = ctx.tick.tag, inp = ctx.input, n = inp.n;
+      // the return line and main see none of topo_kahn's locals: keep the last state that had them
+      if (ctx.tick.data.front !== null) ctx.memo.last = ctx.tick.data;
+      const d = ctx.tick.data.front === null && ctx.memo.last ? ctx.memo.last : ctx.tick.data;
+      const edges = G.parse(inp.graph);
+      const { pos, box } = layout(inp);
+      const counted = d.indeg && d.indeg[0] !== null && tag !== 'enter';
+      const q = d.front !== null && d.rear !== null ? d.queue.slice(d.front, d.rear) : [];
+      const out = d.done ? d.topo.slice(0, d.done) : [];
+      const outSet = new Set(out);
+      const ended = tag === 'after' || tag === 'return';
+      const left = ended ? [...Array(n).keys()].filter((x) => !outSet.has(x)) : [];
+      const prevIn = ctx.prev && ctx.prev.data && ctx.prev.data.indeg ? ctx.prev.data.indeg : d.indeg;
+      const dropped = tag === 'drop' && d.v !== null && d.v < n && prevIn[d.v] !== d.indeg[d.v];
+      const cur = d.u !== null && !ended && d.done ? d.u : null;
+      const checking = (tag === 'drop' || tag === 'ready') && cur !== null && d.v !== null && d.v < n;
+      const items = G.picture({
+        n, edges, pos,
+        vsub: (x) => (counted ? 'in ' + d.indeg[x] : ''),
+        vcls: (x) => 'gw-sub ' + (x === cur ? 'focus hot' : outSet.has(x) ? 'done' : left.includes(x) ? 'gw-ring' : q.includes(x) ? 'part-b' : dropped && x === d.v ? 'hot' : ''),
+        ecls: (a, b) => (checking && a === cur && b === d.v ? 'hot' : outSet.has(a) ? 'gw-gone' : left.includes(a) && left.includes(b) ? 'gw-cycle' : ''),
+      });
+      for (const it of items) if (it.kind === 'vertex' && dropped && it.key === 'gv' + d.v) it.flash = true;
+      if (checking) items.push({ key: 'cv', kind: 'cursor', at: 'gv' + d.v, side: 'above', text: 'v', cls: 'c-amber' });
+      // the queue and the order, under the graph; a vertex slides from one to the other
+      const x0 = box.x0 + 90, y0 = box.y1 + 34;
+      items.push(...row('qu', 'queue', q, x0, y0, { ids: (v) => 'tk' + v, empty: 'empty', cls: () => 'part-b', from: (v) => ({ x: pos[v].x - 22, y: pos[v].y - 21 }) }));
+      items.push(...row('or', 'topo', out, x0, y0 + 64, { ids: (v) => 'tk' + v, cls: () => 'done', sub: (v, i) => i }));
+      items.push(...row('id', 'indeg', [...Array(n).keys()], x0, y0 + 136, { ids: (v) => 'id' + v, sub: (v) => v, cls: (v) => (dropped && v === d.v ? 'hot' : counted && d.indeg[v] === 0 && !outSet.has(v) ? 'part-b' : '') }).map((it) => (it.kind === 'cell' ? Object.assign(it, { text: counted ? d.indeg[it.sub] : '' }) : it)));
+      const view = GW.view([box, { x0: x0 - 90, y0, x1: x0 + Math.max(n, 6) * 48, y1: y0 + 200 }]);
+      let say = '';
+      switch (tag) {
+        case 'enter': say = 'topo_kahn(' + n + ', topo): find an order where every arrow points from an earlier vertex to a later one.'; break;
+        case 'count': say = 'count_in() counts the arrows coming into each vertex: ' + [...Array(n).keys()].map((x) => x + ':' + d.indeg[x]).join(', ') + '. A vertex with 0 waits for nobody.'; break;
+        case 'seed-loop': say = d.v < n ? 'Is vertex ' + d.v + ' free to go?' : 'The starting queue: ' + GW.list(q) + '.'; break;
+        case 'seed-test': say = d.indeg[d.v] === 0 ? 'indeg[' + d.v + '] is 0: nothing has to come before ' + d.v + '.' : 'indeg[' + d.v + '] is ' + d.indeg[d.v] + ': ' + d.v + ' must wait.'; break;
+        case 'seed': say = d.v + ' joins the queue.'; break;
+        case 'loop': say = q.length ? 'The queue holds ' + q.join(', ') + ': each of these can go next.' : (d.done < n ? 'The queue is empty, but only ' + d.done + ' of ' + n + ' vertices are placed.' : 'The queue is empty and all ' + n + ' vertices are placed.'); break;
+        case 'take': say = 'Take u = ' + d.u + ' from the front of the queue.'; break;
+        case 'place': say = 'topo[' + (d.done - 1) + '] = ' + d.u + '. Everything that had to come before ' + d.u + ' is already in topo. Its arrows can now be taken away.'; break;
+        case 'scan': say = d.v < n ? (GW.has(edges, d.u, d.v) ? 'There is an arrow ' + d.u + ' → ' + d.v + '.' : 'No arrow ' + d.u + ' → ' + d.v + '.') : 'All of ' + d.u + '\'s arrows have been taken away.'; break;
+        case 'drop': say = !dropped ? 'Nothing to do for ' + d.v + '.' : '--indeg[' + d.v + ']: one fewer arrow into ' + d.v + ', now ' + d.indeg[d.v] + '.' + (d.indeg[d.v] === 0 ? ' It was the last one.' : ' It still has to wait.'); break;
+        case 'ready': say = d.v + ' has nothing left to wait for: it joins the queue.'; break;
+        case 'return': say = d.done === n ? 'All ' + n + ' vertices are placed: ' + out.join(', ') + '.' : 'Only ' + d.done + ' of ' + n + ' are placed. ' + left.join(', ') + ' never reached in-degree 0: each waits for another one of them. That is a cycle.'; break;
+        case 'after': say = d.done === n ? 'topo = ' + out.join(', ') + '. Every arrow goes left to right in this order. Other orders can be right too: whenever the queue held two vertices, either could have gone first.' : 'No topological order exists: the red arrows form a cycle, and in a cycle every vertex waits for the one before it.'; break;
+      }
+      return { items, say, view, slow: tag === 'ready' || (tag === 'return' && d.done < n) };
+    },
+    predict: [
+      {
+        at: (t, i, ts) => { if (t.tag !== 'place') return false; const r = []; for (let k = i + 1; k < ts.length && ts[k].tag !== 'take' && ts[k].tag !== 'return'; k++) if (ts[k].tag === 'ready') r.push(ts[k].data.v); return r.length === 1 && i > 10; },
+        once: true, ask: (t) => t.data.u + ' is placed and its arrows are taken away. Click the vertex that becomes ready because of it.',
+        answer: (ts, i) => { for (let k = i + 1; k < ts.length; k++) if (ts[k].tag === 'ready') return 'gv' + ts[k].data.v; return null; },
+        explain: () => 'The only vertex whose last incoming arrow came from it.',
+      },
+      { at: (t, i, ts) => t.tag === 'loop' && t.data.front === t.data.rear, once: true, ask: 'The queue is empty. Has every vertex been placed?', options: () => ['Yes', 'No'], answer: (ts, i, ctx) => (ts[i].data.done === ctx.input.n ? 'Yes' : 'No'), pick: 'option', explain: (ts, i, ctx) => (ts[i].data.done === ctx.input.n ? 'Every vertex got to in-degree 0.' : 'Some vertices still have arrows coming in from each other: a cycle.') },
+    ],
+    quiz: [
+      { q: 'Which vertices can come first in a topological order?', options: ['Those with no arrows going out', 'Those with no arrows coming in', 'The one with the smallest number', 'Any vertex'], answer: 1, why: 'Nothing has to come before a vertex with in-degree 0.' },
+      { q: 'Kahn\'s algorithm ends with fewer than n vertices placed. Why?', options: ['The graph is disconnected', 'There is a cycle', 'The queue was too small', 'Some vertex has no edges'], answer: 1, why: 'In a cycle every vertex has an arrow coming in from another vertex of the cycle, so none of them ever reaches 0.' },
+      { q: 'Is the topological order unique?', options: ['Always', 'Never', 'Only when the queue never holds more than one vertex', 'Only for trees'], answer: 2, why: 'When two vertices are ready at the same time, either could go first.' },
+      { q: 'With an adjacency matrix, Kahn\'s algorithm takes...', options: ['O(n)', 'O(n + m)', 'O(n²)', 'O(n³)'], answer: 2, why: 'Counting in-degrees and taking away each vertex\'s arrows both read whole rows: n² in all. With lists it is O(n + m).' },
+    ],
+    compareWith: 'topo-dfs',
+  });
+
+  // ---- topological order by depth-first finishing times --------------------------------------------------
+  X.topic({
+    id: 'topo-dfs', family: 'gorder', order: 20, title: 'Topological order (DFS)',
+    blurb: 'Run depth-first search and note when each vertex is finished. A vertex finishes only after everything it points to: reverse the finishing order and every arrow points forwards.',
+    code: `int visited[MAXV];
+int order[MAXV];     /* vertices in the order they finish */
+int count = 0;
+
+void visit(int n, int u)
+{
+    int v;
+    visited[u] = 1;                       /*@ mark */
+    for (v = 0; v < n; v++)               /*@ scan */
+        if (adj[u][v] && !visited[v])     /*@ check */
+            visit(n, v);                  /*@ dive */
+    order[count++] = u;                   /*@ finish */
+}
+
+/* print a topological order: the reverse of the finishing order */
+void topo_dfs(int n)
+{
+    int u;
+    for (u = 0; u < n; u++)               /*@ outer */
+        if (!visited[u])                  /*@ outer-test */
+            visit(n, u);                  /*@ start */
+    while (count > 0)                     /*@ pop-loop */
+        printf("%d ", order[--count]);    /*@ pop */
+}`,
+    animate: ['topo_dfs', 'visit'],
+    inputs: dirInputs(DP.tangled),
+    presets: [
+      { label: 'Tangled', values: Object.assign({}, DP.tangled) },
+      { label: 'Courses', values: Object.assign({}, DP.courses) },
+      { label: 'Diamond', values: Object.assign({}, DP.diamond) },
+      { label: 'A chain', values: Object.assign({}, DP.chain) },
+    ],
+    counters: ['compares', 'writes'],
+    main: (inp) => gMain(inp, '', 'topo_dfs(' + inp.n + ');', true),
+    capture(P) {
+      const calls = P.calls(['v', 'u']);
+      return { visited: GW.ints(P, 'visited', 10), order: GW.ints(P, 'order', 10), count: P.val('count'), calls: calls.filter((c) => c.fn === 'visit'), outer: (calls.find((c) => c.fn === 'topo_dfs') || { args: {} }).args.u };
+    },
+    scene(ctx) {
+      const d = ctx.tick.data, tag = ctx.tick.tag, inp = ctx.input, n = inp.n;
+      const edges = G.parse(inp.graph);
+      const { pos, box } = layout(inp);
+      const memo = ctx.memo;
+      if (memo.at !== ctx.i) {
+        memo.at = ctx.i;
+        memo.parent = memo.parent || {};
+        memo.total = Math.max(memo.total || 0, d.count || 0);
+        d.calls.forEach((c, k) => { if (k > 0 && memo.parent[c.args.u] === undefined) memo.parent[c.args.u] = d.calls[k - 1].args.u; });
+        if (tag === 'pop-loop' || tag === 'pop') memo.popping = true;
+      }
+      const me = frameOf(ctx, d.calls, ['finish']);
+      const u = me ? me.args.u : null, v = me && me.args.v !== undefined ? me.args.v : null;
+      const onStack = d.calls.map((c) => c.args.u);
+      const total = memo.total;
+      const fin = d.order.slice(0, memo.popping ? total : d.count || 0);
+      const finSet = new Set(fin);
+      const stackPart = memo.popping ? d.order.slice(0, d.count) : fin;
+      const printed = memo.popping ? d.order.slice(d.count, total).reverse() : [];
+      const checking = (tag === 'check' || tag === 'dive') && v !== null && v < n;
+      const isTree = (a, b) => memo.parent[b] === a;
+      const onPath = (a, b) => { const i = onStack.indexOf(a); return i >= 0 && onStack[i + 1] === b; };
+      const items = orient(G.picture({
+        n, edges, pos,
+        vcls: (x) => (x === u && !memo.popping && tag !== 'start' ? 'focus hot' : finSet.has(x) ? 'done' : onStack.includes(x) ? 'part-b' : ''),
+        ecls: (a, b) => (checking && a === u && b === v ? 'hot' : onPath(a, b) ? 'gw-path' : isTree(a, b) ? 'gw-tree' : ''),
+      }), memo.parent);
+      if (checking) items.push({ key: 'cv', kind: 'cursor', at: 'gv' + v, side: 'above', text: 'v', cls: 'c-amber' });
+      // finished vertices pile up on a stack; at the end they come off it, newest first
+      const sx = box.x1 + 90, sy = box.y1 - 36;
+      items.push(...GW.tower('fs', stackPart, {
+        x0: sx, y0: sy, w: 60, h: 36, title: 'order[]', ids: stackPart.map((x) => 'fo' + x),
+        cls: (k) => 'done' + (k === stackPart.length - 1 ? ' gw-top' : ''),
+      }).map((it) => (it.kind === 'cell' ? Object.assign(it, { enter: 'fly', from: { x: pos[it.text].x - 30, y: pos[it.text].y - 18 } }) : it)));
+      stackPart.forEach((x, k) => items.push({ key: 'fsi' + k, kind: 'text', x: sx - 10, y: sy - k * 40 + 23, text: String(k), cls: 'gw-small', anchor: 'end' }));
+      const ox = box.x0 + 150, oy = box.y1 + 40;
+      if (memo.popping) items.push(...row('pr', 'printed', printed, ox, oy, { ids: (x) => 'fo' + x, cls: () => 'part-a' }));
+      if (!memo.popping && d.calls.length) items.push({ key: 'path', kind: 'text', x: box.x0, y: box.y1 + 50, text: 'path: ' + onStack.join(' → '), cls: 'gw-note' });
+      const view = GW.view([box, { x0: sx - 30, y0: Math.min(box.y0, sy - (n - 1) * 40), x1: sx + 90, y1: sy + 60 }, { x0: box.x0, y0: oy, x1: ox + n * 48, y1: oy + 50 }]);
+      let say = '';
+      const pu = d.outer;
+      switch (tag) {
+        case 'enter': say = 'topo_dfs(' + n + '): a depth-first search that writes each vertex down at the moment it is finished.'; break;
+        case 'outer': say = pu < n ? 'Is ' + pu + ' visited yet?' : 'Every vertex has been visited and finished.'; break;
+        case 'outer-test': say = d.visited[pu] ? pu + ' was reached already.' : pu + ' has not been reached: start a search from it.'; break;
+        case 'start': say = 'Call visit(n, ' + pu + ').'; break;
+        case 'mark': say = 'Mark ' + u + ' visited. The path of calls is ' + onStack.join(' → ') + '.'; break;
+        case 'scan': say = v < n ? u + ' tries v = ' + v + '.' : 'All of ' + u + '\'s arrows have been followed.'; break;
+        case 'check': say = !GW.has(edges, u, v) ? 'No arrow ' + u + ' → ' + v + '.' : !d.visited[v] ? 'Arrow ' + u + ' → ' + v + ', and ' + v + ' is new: follow it before anything else.' : finSet.has(v) ? v + ' is finished already, so it is already in order[] below where ' + u + ' will go. Good: ' + u + ' must come before ' + v + '.' : v + ' is on the path: that would be a cycle.'; break;
+        case 'dive': say = 'Call visit(n, ' + v + '). ' + u + ' waits.'; break;
+        case 'finish': say = u + ' is finished: everything it points to is already in order[]. order[' + (d.count - 1) + '] = ' + u + '.'; break;
+        case 'pop-loop': say = d.count > 0 ? (d.count === total ? 'Every vertex is in order[], finished first at the bottom. Now read it from the top down.' : 'Next from the top.') : 'Done. Printed: ' + printed.join(' ') + '.'; break;
+        case 'pop': say = 'Print ' + printed[printed.length - 1] + '. It finished after everything it points to, so it comes before all of them.'; break;
+        case 'after': say = 'Topological order: ' + printed.join(', ') + '. Check any arrow: its tail is printed before its head.'; break;
+      }
+      if (!say && ctx.tick.end) say = me && me.fn === 'visit' ? 'visit(' + u + ') returns.' : 'topo_dfs() is done.';
+      return { items, say, view, slow: tag === 'finish' };
+    },
+    predict: [
+      { at: (t) => t.tag === 'start', once: true, ask: 'Which vertex will be the first to finish? Click it.', answer: (ts) => { const k = ts.findIndex((x) => x.tag === 'finish'); return 'gv' + ts[k].data.order[0]; }, explain: () => 'The first vertex the search reaches that has no unvisited vertex to go on to: a dead end.' },
+      { at: (t, i, ts) => t.tag === 'pop-loop' && ts[i + 1] && ts[i + 1].tag === 'pop' && t.data.count === Math.max(...ts.map((x) => x.data.count || 0)), once: true, ask: 'Which vertex is printed first?', options: (ts, i, ctx) => [...Array(ctx.input.n).keys()].map(String), answer: (ts, i) => String(ts[i].data.order[ts[i].data.count - 1]), pick: 'option', explain: () => 'The one that finished last: it is on top of order[].' },
+    ],
+    quiz: [
+      { q: 'Why is the reverse finishing order a topological order?', options: ['DFS visits vertices by number', 'For every arrow u → v, v finishes before u', 'Finishing order is random', 'Because the graph is a tree'], answer: 1, why: 'When u is finished, every vertex it points to has already finished (or was finished earlier), so reversing puts u first.' },
+      { q: 'What would a back edge (to a vertex still on the path) mean here?', options: ['Nothing', 'A cycle, so no topological order exists', 'A disconnected graph', 'A shorter path'], answer: 1, why: 'The arrow goes from a descendant up to an ancestor: together with the path that is a cycle.' },
+      { q: 'Why does topo_dfs loop over all vertices, not just start at 0?', options: ['To print each twice', 'Some vertices may not be reachable from 0', 'It is faster', 'To find cycles'], answer: 1, why: 'Every vertex must be in the order, even those no arrow from 0 reaches.' },
+      { q: 'This method and Kahn\'s algorithm on the same graph...', options: ['Always give the same order', 'Can give different, equally correct orders', 'Cannot both be right', 'Only work on trees'], answer: 1, why: 'A graph usually has many topological orders.' },
+    ],
+    compareWith: 'topo-kahn',
+  });
+
+  // ---- cycle in an undirected graph ---------------------------------------------------------------------------
+  X.topic({
+    id: 'cycle-undirected', family: 'gorder', order: 30, title: 'Cycle (undirected)',
+    blurb: 'Depth-first search that remembers where it came from. Meeting a visited vertex that is not the one you came from means the graph goes round in a circle.',
+    code: `int visited[MAXV];
+
+/* is there a cycle around u? parent is the vertex u was reached from (-1: none) */
+int has_cycle(int n, int u, int parent)
+{
+    int v;
+    visited[u] = 1;                         /*@ mark */
+    for (v = 0; v < n; v++)                 /*@ scan */
+        if (adj[u][v] && v != parent) {     /*@ test-edge */
+            if (visited[v])                 /*@ test-seen */
+                return 1;                   /*@ found */
+            if (has_cycle(n, v, u))         /*@ dive */
+                return 1;                   /*@ pass-up */
+        }
+    return 0;                               /*@ none */
+}
+
+int any_cycle(int n)
+{
+    int u;
+    for (u = 0; u < n; u++)                 /*@ outer */
+        if (!visited[u] && has_cycle(n, u, -1))   /*@ start */
+            return 1;                       /*@ yes */
+    return 0;                               /*@ no */
+}`,
+    animate: ['any_cycle', 'has_cycle'],
+    inputs: undirInputs(UP.house),
+    presets: [
+      { label: 'House', values: Object.assign({}, UP.house) },
+      { label: 'Tree', values: Object.assign({}, UP.tree) },
+      { label: 'Two parts', values: { n: 7, graph: '0-1 1-2 3-4 4-5 5-6 6-3', pos: UP.twoPos } },
+      { label: 'Forest', values: { n: 6, graph: '0-1 1-2 3-4 3-5', pos: [[-220, -80], [-120, 40], [-220, 150], [120, -80], [40, 80], [210, 80]] } },
+    ],
+    counters: ['compares'],
+    main: (inp) => gMain(inp, '', 'printf("%s\\n", any_cycle(' + inp.n + ') ? "cycle" : "no cycle");', false),
+    capture(P) {
+      const calls = P.calls(['v', 'u']);
+      return { visited: GW.ints(P, 'visited', 10), calls: calls.filter((c) => c.fn === 'has_cycle'), outer: (calls.find((c) => c.fn === 'any_cycle') || { args: {} }).args.u };
+    },
+    scene(ctx) {
+      const d = ctx.tick.data, tag = ctx.tick.tag, inp = ctx.input, n = inp.n;
+      const edges = G.parse(inp.graph);
+      const { pos, box } = layout(inp);
+      const memo = ctx.memo;
+      const me = frameOf(ctx, d.calls, ['found', 'pass-up', 'none']);
+      if (memo.at !== ctx.i) {
+        memo.at = ctx.i;
+        memo.parent = memo.parent || {};
+        d.calls.forEach((c) => { if (c.args.parent >= 0 && memo.parent[c.args.u] === undefined) memo.parent[c.args.u] = c.args.parent; });
+        if (tag === 'found' && me) {
+          // the cycle: the path of calls from v up to u, closed by the edge u–v
+          const path = ctx.prev.data.calls.map((c) => c.args.u);
+          memo.cycle = path.slice(path.indexOf(me.args.v));
+          memo.close = [me.args.u, me.args.v];
+        }
+      }
+      const u = me ? me.args.u : null, v = me && me.args.v !== undefined ? me.args.v : null, par = me ? me.args.parent : null;
+      const onStack = d.calls.map((c) => c.args.u);
+      const cyc = memo.cycle || [];
+      const inCycle = (a, b) => { const i = cyc.indexOf(a), j = cyc.indexOf(b); return i >= 0 && j >= 0 && (Math.abs(i - j) === 1 || (memo.close && ((a === memo.close[0] && b === memo.close[1]) || (b === memo.close[0] && a === memo.close[1])))); };
+      const looking = (tag === 'test-edge' || tag === 'test-seen' || tag === 'dive' || tag === 'found') && v !== null && v < n;
+      const isParentEdge = looking && tag === 'test-edge' && v === par && GW.has(edges, u, v);
+      const onPath = (a, b) => { const i = onStack.indexOf(a), j = onStack.indexOf(b); return i >= 0 && j >= 0 && Math.abs(i - j) === 1; };
+      const items = orient(G.picture({
+        n, edges, pos,
+        vcls: (x) => (cyc.includes(x) ? 'gw-ring hot' : x === u && tag !== 'after' ? 'focus hot' : onStack.includes(x) ? 'part-b' : d.visited[x] ? 'done' : ''),
+        ecls: (a, b) => {
+          if (inCycle(a, b)) return 'gw-cycle';
+          const here = looking && ((a === u && b === v) || (a === v && b === u));
+          if (here) return isParentEdge ? 'gw-ignore' : 'hot';
+          if (onPath(a, b)) return 'gw-path gw-tree';
+          return memo.parent[b] === a || memo.parent[a] === b ? 'gw-tree' : '';
+        },
+        elabel: (a, b) => (isParentEdge && ((a === u && b === v) || (a === v && b === u)) ? 'came from here' : ''),
+      }), memo.parent);
+      for (const it of items) if (it.kind === 'arrow') it.cls += ' gw-lab';
+      if (looking) items.push({ key: 'cv', kind: 'cursor', at: 'gv' + v, side: 'above', text: 'v', cls: 'c-amber' });
+      items.push(...callTower(d.calls, (c) => 'has_cycle(u=' + c.args.u + ', parent=' + c.args.parent + ')', box, n));
+      // the answer travelling back up the stack
+      if ((tag === 'found' || tag === 'pass-up') && d.calls.length) items.push({ key: 'ret', kind: 'token', x: box.x1 + 352, y: box.y1 - 18 - (d.calls.length - 1) * 40, r: 15, text: '1', cls: 'c-rose' });
+      const view = GW.view([box, towerBox(box, n), { x0: box.x1 + 330, y0: box.y1 - 30, x1: box.x1 + 372, y1: box.y1 }]);
+      let say = '';
+      const pu = d.outer;
+      switch (tag) {
+        case 'enter': say = 'any_cycle(' + n + '): look for a cycle in every part of the graph.'; break;
+        case 'outer': say = pu < n ? 'Vertex ' + pu + (d.visited[pu] ? ' is visited already.' : ' is not visited.') : 'Every part of the graph has been searched.'; break;
+        case 'start': say = d.calls.length ? 'Call has_cycle(n, ' + pu + ', -1): a new search, with no parent.' : (d.visited[pu] ? pu + ' was reached by an earlier search: no need to start one.' : 'The search from ' + pu + ' found a cycle.'); break;
+        case 'mark': say = 'Mark ' + u + ' visited. It was reached from ' + (par >= 0 ? par : 'nowhere (it starts the search)') + '.'; break;
+        case 'scan': say = v < n ? u + ' tries v = ' + v + '.' : 'All of ' + u + '\'s neighbours are done, without finding a cycle.'; break;
+        case 'test-edge': say = !GW.has(edges, u, v) ? 'No edge ' + u + '–' + v + '.' : v === par ? v + ' is the parent: ' + u + ' was reached along this very edge. Going back along it is not a cycle.' : 'Edge ' + u + '–' + v + ', not the one ' + u + ' came along.'; break;
+        case 'test-seen': say = d.visited[v] ? v + ' is visited already, and it is not the parent. There is another way from ' + v + ' to ' + u + '.' : v + ' is new.'; break;
+        case 'found': say = 'return 1: a cycle, ' + cyc.join(' – ') + ' – ' + cyc[0] + '. The red edge ' + u + '–' + v + ' is the one that closes it.'; break;
+        case 'dive': say = 'Call has_cycle(n, ' + v + ', ' + u + '): ' + u + ' is the parent of ' + v + '.'; break;
+        case 'pass-up': say = 'The call below found a cycle, so this one returns 1 too. The answer climbs back up the stack.'; break;
+        case 'none': say = 'has_cycle(' + u + ') returns 0: no cycle below ' + u + '.'; break;
+        case 'yes': say = 'any_cycle() returns 1.'; break;
+        case 'no': say = 'any_cycle() returns 0: no cycle anywhere. Every component is a tree, so the green edges are all the edges.'; break;
+        case 'after': say = cyc.length ? 'The graph has a cycle: ' + cyc.join(' – ') + ' – ' + cyc[0] + '.' : 'No cycle: the graph is a forest.'; break;
+      }
+      if (!say && ctx.tick.end) say = 'has_cycle(' + u + ') returns.';
+      return { items, say, view, slow: tag === 'found' };
+    },
+    predict: [
+      { at: (t, i, ts) => ts[i + 1] && ts[i + 1].tag === 'test-edge' && (() => { const c = ts[i + 1].data.calls; const f = c[c.length - 1]; return f && f.args.v === f.args.parent; })(), once: true, ask: 'u is about to look at the edge back to its parent. Does that count as a cycle?', options: () => ['Yes', 'No'], answer: () => 'No', pick: 'option', explain: () => 'It is the edge u was reached along. A cycle needs a different way back.' },
+      { at: (t, i, ts) => ts[i + 1] && ts[i + 1].tag === 'found', once: true, ask: 'A cycle has just been found. Click the vertex at the far end of the closing edge.', answer: (ts, i) => { const c = ts[i].data.calls; return 'gv' + c[c.length - 1].args.v; }, explain: () => 'v: an ancestor of u, still on the path, reached a second way.' },
+    ],
+    quiz: [
+      { q: 'Why does the code skip v == parent?', options: ['To save time', 'In an undirected graph the edge to the parent is the edge just used: it would look like a cycle of length 2', 'The parent is never visited', 'To avoid recursion'], answer: 1, why: 'adj[u][parent] is the same edge seen from the other end.' },
+      { q: 'A connected undirected graph with n vertices has no cycle. How many edges does it have?', options: ['n', 'n - 1', 'n + 1', 'Any number'], answer: 1, why: 'It is a tree, and a tree on n vertices has n - 1 edges.' },
+      { q: 'Why does any_cycle() start a search from every unvisited vertex?', options: ['To count vertices', 'The cycle may be in a part that 0 cannot reach', 'Each search only checks one edge', 'It does not need to'], answer: 1, why: 'A disconnected graph can have a cycle in any of its components.' },
+      { q: 'Would this parent test work for a directed graph?', options: ['Yes, unchanged', 'No: a visited vertex that is already finished does not make a directed cycle', 'Only for trees', 'Only with a matrix'], answer: 1, why: 'Directed graphs need to know whether the vertex is still on the path: the white/grey/black colouring.' },
+    ],
+    compareWith: 'cycle-directed',
+  });
+
+  // ---- cycle in a directed graph: white, grey, black -------------------------------------------------------
+  X.topic({
+    id: 'cycle-directed', family: 'gorder', order: 31, title: 'Cycle (directed)',
+    blurb: 'Three colours: white not reached, grey on the current path, black finished. An arrow to a grey vertex leads back up the path: a cycle. An arrow to a black one does not.',
+    code: `#define WHITE 0   /* not reached yet */
+#define GREY  1   /* on the current path */
+#define BLACK 2   /* finished: nothing below it leads back */
+
+int colour[MAXV];
+
+int cyclic(int n, int u)
+{
+    int v;
+    colour[u] = GREY;                                /*@ grey */
+    for (v = 0; v < n; v++)                          /*@ scan */
+        if (adj[u][v]) {                             /*@ test-edge */
+            if (colour[v] == GREY)                   /*@ test-grey */
+                return 1;                            /*@ back */
+            if (colour[v] == WHITE && cyclic(n, v))  /*@ dive */
+                return 1;                            /*@ pass-up */
+        }
+    colour[u] = BLACK;                               /*@ black */
+    return 0;                                        /*@ none */
+}
+
+int has_cycle(int n)
+{
+    int u;
+    for (u = 0; u < n; u++)                          /*@ outer */
+        if (colour[u] == WHITE && cyclic(n, u))      /*@ start */
+            return 1;                                /*@ yes */
+    return 0;                                        /*@ no */
+}`,
+    animate: ['has_cycle', 'cyclic'],
+    inputs: dirInputs(DP.diamond),
+    presets: [
+      { label: 'Diamond', values: Object.assign({}, DP.diamond) },
+      { label: 'With a cycle', values: Object.assign({}, DP.cyclic) },
+      { label: 'Ring', values: Object.assign({}, DP.ring) },
+      { label: 'Tangled', values: Object.assign({}, DP.tangled) },
+    ],
+    counters: ['compares'],
+    main: (inp) => gMain(inp, '', 'printf("%s\\n", has_cycle(' + inp.n + ') ? "cycle" : "no cycle");', true),
+    capture(P) {
+      const calls = P.calls(['v', 'u']);
+      return { colour: GW.ints(P, 'colour', 10), calls: calls.filter((c) => c.fn === 'cyclic'), outer: (calls.find((c) => c.fn === 'has_cycle') || { args: {} }).args.u };
+    },
+    scene(ctx) {
+      const d = ctx.tick.data, tag = ctx.tick.tag, inp = ctx.input, n = inp.n;
+      const edges = G.parse(inp.graph);
+      const { pos, box } = layout(inp);
+      const memo = ctx.memo;
+      const me = frameOf(ctx, d.calls, ['back', 'pass-up', 'none']);
+      if (memo.at !== ctx.i) {
+        memo.at = ctx.i;
+        memo.parent = memo.parent || {};
+        d.calls.forEach((c, k) => { if (k > 0 && memo.parent[c.args.u] === undefined) memo.parent[c.args.u] = d.calls[k - 1].args.u; });
+        memo.blackHits = memo.blackHits || new Set();
+        if (tag === 'dive' && me && d.colour[me.args.v] === 2) memo.blackHits.add(me.args.u + '>' + me.args.v);
+        if (tag === 'back' && me) {
+          const path = ctx.prev.data.calls.map((c) => c.args.u);
+          memo.cycle = path.slice(path.indexOf(me.args.v));
+        }
+      }
+      const u = me ? me.args.u : null, v = me && me.args.v !== undefined ? me.args.v : null;
+      const col = (x) => d.colour[x] || 0;
+      const onStack = d.calls.map((c) => c.args.u);
+      const cyc = memo.cycle || [];
+      const inCycle = (a, b) => { const i = cyc.indexOf(a), j = cyc.indexOf(b); return i >= 0 && j >= 0 && (j === i + 1 || (i === cyc.length - 1 && j === 0)); };
+      const looking = ['test-edge', 'test-grey', 'dive', 'back'].includes(tag) && v !== null && v < n;
+      const onPath = (a, b) => { const i = onStack.indexOf(a); return i >= 0 && onStack[i + 1] === b; };
+      const items = orient(G.picture({
+        n, edges, pos,
+        vcls: (x) => (col(x) === 1 ? 'gw-grey' : col(x) === 2 ? 'gw-black' : '') + (cyc.includes(x) ? ' gw-ring' : x === u && tag !== 'after' ? ' focus' : ''),
+        ecls: (a, b) => (inCycle(a, b) ? 'gw-cycle' : looking && a === u && b === v ? 'hot' : onPath(a, b) ? 'gw-path' : memo.blackHits.has(a + '>' + b) ? 'gw-cross' : memo.parent[b] === a ? 'gw-tree' : ''),
+      }), memo.parent);
+      if (looking) items.push({ key: 'cv', kind: 'cursor', at: 'gv' + v, side: 'above', text: 'v', cls: 'c-amber' });
+      if (u !== null && tag !== 'after') items.push({ key: 'cu', kind: 'cursor', at: 'gv' + u, side: 'left', text: 'u', cls: 'c-teal' });
+      items.push(...callTower(d.calls, (c) => 'cyclic(u=' + c.args.u + ')' + (c.args.v !== undefined && c.args.v < n ? '  v=' + c.args.v : ''), box, n));
+      // the colour array, under the graph
+      const x0 = box.x0 + 80, y0 = box.y1 + 34;
+      const names = ['W', 'G', 'B'];
+      items.push(...row('co', 'colour', [...Array(n).keys()], x0, y0, { ids: (x) => 'co' + x, sub: (x) => x, cls: (x) => ['gw-white', 'gw-grey', 'gw-black'][col(x)] }).map((it) => (it.kind === 'cell' ? Object.assign(it, { text: names[col(it.sub)] }) : it)));
+      items.push({ key: 'leg', kind: 'text', x: x0 - 80, y: y0 + 84, text: 'W = white, not reached.  G = grey, on the path.  B = black, finished.', cls: 'gw-note' });
+      const view = GW.view([box, towerBox(box, n), { x0: x0 - 90, y0, x1: x0 + n * 48, y1: y0 + 90 }]);
+      let say = '';
+      const pu = d.outer;
+      switch (tag) {
+        case 'enter': say = 'has_cycle(' + n + '): every vertex starts white.'; break;
+        case 'outer': say = pu < n ? 'Vertex ' + pu + ' is ' + ['white', 'grey', 'black'][col(pu)] + '.' : 'Every vertex is black: no cycle anywhere.'; break;
+        case 'start': say = d.calls.length ? 'Call cyclic(n, ' + pu + ').' : col(pu) === 2 ? pu + ' is black already: an earlier search finished it.' : 'The search from ' + pu + ' found a cycle.'; break;
+        case 'grey': say = u + ' turns grey: it is on the current path, ' + onStack.join(' → ') + '.'; break;
+        case 'scan': say = v < n ? u + ' tries v = ' + v + '.' : 'Every arrow out of ' + u + ' has been followed.'; break;
+        case 'test-edge': say = GW.has(edges, u, v) ? 'Arrow ' + u + ' → ' + v + ', and ' + v + ' is ' + ['white', 'grey', 'black'][col(v)] + '.' : 'No arrow ' + u + ' → ' + v + '.'; break;
+        case 'test-grey': say = col(v) === 1 ? v + ' is grey: it is on the path above ' + u + '. The arrow leads back up the path.' : v + ' is not grey.'; break;
+        case 'back': say = 'return 1: the cycle is ' + cyc.join(' → ') + ' → ' + cyc[0] + '.'; break;
+        case 'dive': say = col(v) === 2 ? v + ' is black: it was finished and nothing below it leads back. Reaching it again is not a cycle, so skip it.' : d.calls.length > onStack.indexOf(u) + 1 ? 'Call cyclic(n, ' + v + ').' : v + ' was white, its search came back with 0.'; break;
+        case 'pass-up': say = 'A cycle was found below, so return 1 here too.'; break;
+        case 'black': say = u + ' turns black: no arrow from it leads back to the path. It never needs to be searched again.'; break;
+        case 'none': say = 'cyclic(' + u + ') returns 0.'; break;
+        case 'yes': say = 'has_cycle() returns 1.'; break;
+        case 'no': say = 'has_cycle() returns 0: no cycle.'; break;
+        case 'after': say = cyc.length ? 'Cycle: ' + cyc.join(' → ') + ' → ' + cyc[0] + '.' : 'No cycle.' + (memo.blackHits.size ? ' The dotted arrows reached a black vertex a second way: two paths to the same vertex, which is fine in a directed graph.' : ''); break;
+      }
+      if (!say && ctx.tick.end) say = 'cyclic(' + u + ') returns.';
+      return { items, say, view, slow: tag === 'back' || (tag === 'dive' && col(v) === 2) };
+    },
+    predict: [
+      { at: (t, i, ts) => ts[i + 1] && ts[i + 1].tag === 'test-edge' && (() => { const c = ts[i + 1].data.calls; const f = c[c.length - 1]; return f && f.args.v < 10 && ts[i + 1].data.colour[f.args.v] === 2; })(), once: true, ask: 'The next arrow leads to a black vertex. Is that a cycle?', options: () => ['Yes', 'No'], answer: () => 'No', pick: 'option', explain: () => 'Black means finished: no path from it leads back to the current path.' },
+      { at: (t, i, ts) => ts[i + 1] && ts[i + 1].tag === 'back', once: true, ask: 'A grey vertex has been reached. Click it.', answer: (ts, i) => { const c = ts[i].data.calls; return 'gv' + c[c.length - 1].args.v; }, explain: () => 'It is on the current path: the arrow closes a cycle.' },
+    ],
+    quiz: [
+      { q: 'Why is meeting a black vertex not a cycle?', options: ['Black vertices have no edges', 'It is finished: nothing reachable from it leads to the current path', 'It is a bug', 'It always is a cycle'], answer: 1, why: 'If a path from it led back to a grey vertex, the search would have found that before turning it black.' },
+      { q: 'What are the grey vertices at any moment?', options: ['All visited vertices', 'Exactly the vertices on the current path of calls', 'The finished ones', 'The unvisited ones'], answer: 1, why: 'A vertex turns grey when its call starts and black when it returns.' },
+      { q: 'Why is a simple visited[] flag not enough for directed graphs?', options: ['It is enough', 'It cannot tell "on the path" from "finished", so a diamond would look like a cycle', 'It uses too much memory', 'It cannot be reset'], answer: 1, why: 'In 0 → 1 → 3, 0 → 2 → 3, vertex 3 is visited when reached from 2, but there is no cycle.' },
+      { q: 'A directed graph has no cycle. What else can you then compute?', options: ['A topological order', 'A minimum spanning tree', 'An Euler tour', 'Nothing'], answer: 0, why: 'A directed acyclic graph always has a topological order.' },
+    ],
+    compareWith: 'cycle-undirected',
+  });
+})(SEE);
+
+// ==== topics/gorder-2.js ====
+// Graphs, order and structure: connected components, strongly connected components (Kosaraju) and
+// two-colouring (is the graph bipartite?).
+(function (SEE) {
+  'use strict';
+  const X = SEE.Strux, G = X.GraphKit, GW = X.GWalk;
+  const DP = GW.dirPresets, UP = GW.undirPresets;
+  const gMain = X.gwMain, layout = X.gwLayout, frameOf = X.gwFrameOf, orient = X.gwOrient, row = X.gwRow;
+
+  /** A shaded box around each group of vertices, labelled; groups: Map(c -> [vertices]) */
+  const groupBoxes = (groups, pos, word) => {
+    const items = [];
+    for (const [c, vs] of groups) {
+      if (!vs.length) continue;
+      const b = GW.box(vs.map((v) => pos[v]), 40);
+      if (b.x1 - b.x0 < 120) { const m = (b.x0 + b.x1) / 2; b.x0 = m - 60; b.x1 = m + 60; }
+      items.push({ key: 'grp' + c, kind: 'region', x: b.x0, y: b.y0 - 14, w: b.x1 - b.x0, h: b.y1 - b.y0 + 24, cls: GW.colour(c), text: word + ' ' + c });
+    }
+    return items;
+  };
+  const groupsOf = (arr, n) => {
+    const m = new Map();
+    for (let v = 0; v < n; v++) if (arr[v] !== null && arr[v] >= 0) { if (!m.has(arr[v])) m.set(arr[v], []); m.get(arr[v]).push(v); }
+    return m;
+  };
+
+  // ---- connected components ------------------------------------------------------------------------------
+  X.topic({
+    id: 'components', family: 'gorder', order: 40, title: 'Connected components',
+    blurb: 'Pick a vertex nobody has reached, and flood everything reachable from it with one colour. Repeat until every vertex has a colour: each colour is one component.',
+    code: `int comp[MAXV];   /* the number of v's component; -1: not reached yet */
+
+/* give u, and everything reachable from it, the number c */
+void label(int n, int u, int c)
+{
+    int v;
+    comp[u] = c;                            /*@ paint */
+    for (v = 0; v < n; v++)                 /*@ scan */
+        if (adj[u][v] && comp[v] == -1)     /*@ check */
+            label(n, v, c);                 /*@ dive */
+}
+
+/* number the connected components; returns how many there are */
+int components(int n)
+{
+    int u, count = 0;
+    for (u = 0; u < n; u++)                 /*@ init */
+        comp[u] = -1;                       /*@ clear */
+    for (u = 0; u < n; u++)                 /*@ outer */
+        if (comp[u] == -1)                  /*@ outer-test */
+            label(n, u, count++);           /*@ start */
+    return count;                           /*@ return */
+}`,
+    animate: ['components', 'label'],
+    inputs: X.gwUndirInputs({ n: 7, graph: '0-1 1-2 2-0 3-4 4-5 5-6', pos: UP.twoPos }),
+    presets: [
+      { label: 'Two parts', values: { n: 7, graph: '0-1 1-2 2-0 3-4 4-5 5-6', pos: UP.twoPos } },
+      { label: 'Three and a loner', values: { n: 8, graph: '0-4 4-6 1-5 5-2 3-7', pos: [[-260, -100], [40, -120], [160, 40], [280, -120], [-160, 20], [20, 40], [-260, 130], [280, 80]] } },
+      { label: 'All connected', values: Object.assign({}, UP.house) },
+      { label: 'No edges', values: { n: 4, graph: '', pos: [[-150, -80], [150, -80], [-150, 80], [150, 80]] } },
+    ],
+    counters: ['compares', 'writes'],
+    main: (inp) => gMain(inp, '', 'printf("%d components\\n", components(' + inp.n + '));', false),
+    capture(P) {
+      const calls = P.calls(['v', 'u', 'count']);
+      const top = calls.find((c) => c.fn === 'components') || { args: {} };
+      return { comp: GW.ints(P, 'comp', 10), calls: calls.filter((c) => c.fn === 'label'), outer: top.args.u, count: top.args.count };
+    },
+    scene(ctx) {
+      const d = ctx.tick.data, tag = ctx.tick.tag, inp = ctx.input, n = inp.n;
+      const edges = G.parse(inp.graph);
+      const { pos, box } = layout(inp);
+      const memo = ctx.memo;
+      if (memo.at !== ctx.i) {
+        memo.at = ctx.i;
+        memo.parent = memo.parent || {};
+        d.calls.forEach((c, k) => { if (k > 0 && memo.parent[c.args.u] === undefined) memo.parent[c.args.u] = d.calls[k - 1].args.u; });
+        if (d.count !== undefined) memo.count = d.count;
+        if (tag === 'outer') memo.started = true;
+      }
+      const comp = d.comp.slice(0, n);
+      const painted = (x) => !!memo.started && comp[x] !== null && comp[x] >= 0;  /* a global starts as 0s: ignore them until cleared */
+      const me = frameOf(ctx, d.calls, []);
+      const u = me ? me.args.u : null, v = me && me.args.v !== undefined ? me.args.v : null, c = me ? me.args.c : null;
+      const checking = (tag === 'check' || tag === 'dive') && v !== null && v < n;
+      const items = memo.started ? groupBoxes(groupsOf(comp, n), pos, 'component') : [];
+      items.push(...orient(G.picture({
+        n, edges, pos,
+        vcls: (x) => (painted(x) ? GW.colour(comp[x]) : '') + (x === u && tag !== 'after' ? ' focus' : ''),
+        ecls: (a, b) => (checking && ((a === u && b === v) || (a === v && b === u)) ? 'hot' : memo.parent[b] === a || memo.parent[a] === b ? 'gw-tree' : ''),
+      }), memo.parent));
+      if (checking) items.push({ key: 'cv', kind: 'cursor', at: 'gv' + v, side: 'above', text: 'v', cls: 'c-amber' });
+      items.push(...X.gwCallTower(d.calls, (f) => 'label(u=' + f.args.u + ', c=' + f.args.c + ')', box, n));
+      const x0 = box.x0 + 80, y0 = box.y1 + 40;
+      items.push(...row('cp', 'comp', [...Array(n).keys()], x0, y0, { ids: (x) => 'cp' + x, sub: (x) => x, cls: (x) => (painted(x) ? GW.colour(comp[x]) : '') }).map((it) => (it.kind === 'cell' ? Object.assign(it, { text: comp[it.sub] === null ? '' : comp[it.sub] }) : it)));
+      const pu = d.outer;
+      const outerOn = (tag === 'outer' || tag === 'outer-test' || tag === 'init' || tag === 'clear') && pu !== undefined && pu < n;
+      if (outerOn) items.push({ key: 'cuo', kind: 'cursor', at: 'cp' + pu, side: 'below', text: 'u', cls: 'c-indigo' });
+      const view = GW.view([box, X.gwTowerBox(box, n), { x0: x0 - 80, y0, x1: x0 + n * 48, y1: y0 + 80 }]);
+      let say = '';
+      const count = memo.count || 0;
+      switch (tag) {
+        case 'enter': say = 'components(' + n + '): no vertex has a component number yet.'; break;
+        case 'init': say = pu < n ? 'Clear comp[' + pu + '].' : 'Every comp[] is -1: nobody has been reached.'; break;
+        case 'clear': say = 'comp[' + pu + '] = -1.'; break;
+        case 'outer': say = pu < n ? 'Next, vertex ' + pu + '.' : 'Every vertex has a number: ' + count + ' component' + (count === 1 ? '' : 's') + '.'; break;
+        case 'outer-test': say = painted(pu) ? pu + ' already belongs to component ' + comp[pu] + ': a flood reached it.' : pu + ' has not been reached by any flood: it starts component ' + count + '.'; break;
+        case 'start': say = 'Call label(n, ' + u + ', ' + c + '). count goes up to ' + count + '.'; break;
+        case 'paint': say = 'comp[' + u + '] = ' + c + ': ' + u + ' joins component ' + c + '.'; break;
+        case 'scan': say = v < n ? u + ' tries v = ' + v + '.' : 'All of ' + u + '\'s neighbours are done.'; break;
+        case 'check': say = !GW.has(edges, u, v) ? 'No edge ' + u + '–' + v + '.' : painted(v) ? v + ' is already in component ' + comp[v] + '.' : v + ' is a neighbour with no number yet: the flood spreads to it.'; break;
+        case 'dive': say = 'Call label(n, ' + v + ', ' + c + '): same colour, one step further.'; break;
+        case 'return': say = 'components() returns ' + count + '.'; break;
+        case 'after': say = count + ' component' + (count === 1 ? '' : 's') + '. Two vertices are connected exactly when they have the same number, so "is there a path from a to b?" is now just comp[a] == comp[b].'; break;
+      }
+      if (!say && ctx.tick.end) say = me ? 'label(' + u + ') returns: the flood from ' + u + ' is done.' : 'components() is done.';
+      return { items, say, view, slow: tag === 'start' };
+    },
+    predict: [
+      { at: (t, i, ts) => ts[i + 1] && ts[i + 1].tag === 'start' && ts.slice(0, i).some((x) => x.tag === 'start'), once: true, ask: 'A new component is about to start. Click the vertex it starts from.', answer: (ts, i) => 'gv' + ts[i].data.outer, explain: () => 'The first vertex, in number order, that no flood has reached.' },
+      { at: (t) => t.tag === 'enter', once: true, ask: 'How many components will there be?', options: (ts, i, ctx) => [...Array(Math.min(ctx.input.n, 5)).keys()].map((k) => String(k + 1)), answer: (ts) => String(Math.max(...ts.map((x) => x.data.count || 0))), pick: 'option', explain: () => 'One per group of vertices joined by paths.' },
+    ],
+    quiz: [
+      { q: 'After components() has run, how fast is "are a and b connected?"', options: ['O(1): compare comp[a] and comp[b]', 'O(n)', 'O(n²)', 'It needs another search'], answer: 0, why: 'The work was done once; every later question is two array reads.' },
+      { q: 'How many times is label() called in total?', options: ['Once', 'Once per vertex', 'Once per edge', 'n²'], answer: 1, why: 'A vertex is labelled when it is first reached, and comp[v] == -1 stops a second call.' },
+      { q: 'A graph has n vertices and no edges. How many components?', options: ['0', '1', 'n', 'n - 1'], answer: 2, why: 'Every vertex is alone.' },
+      { q: 'Could breadth-first search do the flooding instead?', options: ['No, only DFS works', 'Yes: any search that reaches everything reachable works', 'Only on trees', 'Only with a matrix'], answer: 1, why: 'All that matters is which vertices are reached, not the order.' },
+    ],
+  });
+
+  // ---- strongly connected components (Kosaraju) ----------------------------------------------------------
+  X.topic({
+    id: 'scc', family: 'gorder', order: 50, title: 'Strongly connected components',
+    blurb: 'Kosaraju: a first depth-first search records finishing order; then, with every arrow turned round, searches started in reverse finishing order each collect exactly one strongly connected component.',
+    code: `int visited[MAXV], comp[MAXV];
+int order[MAXV], top = 0;    /* vertices by finishing time */
+
+/* pass 1: depth-first, recording each vertex as it finishes */
+void fill_order(int n, int u)
+{
+    int v;
+    visited[u] = 1;                          /*@ mark */
+    for (v = 0; v < n; v++)                  /*@ scan1 */
+        if (adj[u][v] && !visited[v])        /*@ check1 */
+            fill_order(n, v);                /*@ dive */
+    order[top++] = u;                        /*@ finish */
+}
+
+/* pass 2: follow arrows backwards: adj[v][u] is v -> u, so u -> v turned round */
+void collect(int n, int u, int c)
+{
+    int v;
+    comp[u] = c;                             /*@ paint */
+    for (v = 0; v < n; v++)                  /*@ scan2 */
+        if (adj[v][u] && comp[v] == -1)      /*@ check2 */
+            collect(n, v, c);                /*@ dive */
+}
+
+int scc(int n)
+{
+    int u, c = 0;
+    for (u = 0; u < n; u++)                  /*@ outer1 */
+        if (!visited[u])
+            fill_order(n, u);                /*@ start1 */
+    for (u = 0; u < n; u++)                  /*@ reset-loop */
+        comp[u] = -1;                        /*@ reset */
+    while (top > 0) {                        /*@ loop2 */
+        u = order[--top];                    /*@ pop */
+        if (comp[u] == -1)                   /*@ test2 */
+            collect(n, u, c++);              /*@ start2 */
+    }
+    return c;                                /*@ return */
+}`,
+    animate: ['scc', 'fill_order', 'collect'],
+    inputs: X.gwDirInputs(DP.scc),
+    presets: [
+      { label: 'Three groups', values: Object.assign({}, DP.scc) },
+      { label: 'One ring', values: Object.assign({}, DP.ring) },
+      { label: 'No cycles', values: Object.assign({}, DP.diamond) },
+      { label: 'Two loops', values: { n: 6, graph: '0>1 1>0 1>2 2>3 3>4 4>2 5>4', pos: [[-260, -60], [-130, 40], [10, -60], [140, 60], [200, -110], [330, 0]] } },
+    ],
+    counters: ['compares', 'writes'],
+    main: (inp) => gMain(inp, '', 'printf("%d strongly connected components\\n", scc(' + inp.n + '));', true),
+    capture(P) {
+      const calls = P.calls(['v', 'u', 'c']);
+      const top = calls.find((c) => c.fn === 'scc') || { args: {} };
+      return { visited: GW.ints(P, 'visited', 10), comp: GW.ints(P, 'comp', 10), order: GW.ints(P, 'order', 10), top: P.val('top'), calls: calls.filter((c) => c.fn !== 'scc' && c.fn !== 'main'), outer: top.args.u, c: top.args.c };
+    },
+    scene(ctx) {
+      const d = ctx.tick.data, tag = ctx.tick.tag, inp = ctx.input, n = inp.n;
+      const edges = G.parse(inp.graph);
+      const { pos, box } = layout(inp);
+      const memo = ctx.memo;
+      if (memo.at !== ctx.i) {
+        memo.at = ctx.i;
+        memo.parent = memo.parent || {};
+        if (tag === 'reset-loop' || tag === 'reset') memo.flip = true;
+        if (tag === 'loop2' || tag === 'pop') memo.pass2 = true;
+        if (!memo.flip) d.calls.forEach((c, k) => { if (k > 0 && memo.parent[c.args.u] === undefined) memo.parent[c.args.u] = d.calls[k - 1].args.u; });
+        memo.total = Math.max(memo.total || 0, d.top || 0);
+        if (d.c !== undefined && d.c !== null) memo.c = d.c;
+      }
+      const flip = !!memo.flip, pass2 = !!memo.pass2;
+      const me = frameOf(ctx, d.calls, ['finish']);
+      const u = me ? me.args.u : null, v = me && me.args.v !== undefined ? me.args.v : null;
+      const comp = d.comp.slice(0, n);
+      const painted = (x) => pass2 && comp[x] !== null && comp[x] >= 0;
+      const onStack = d.calls.map((c) => c.args.u);
+      const finished = new Set(d.order.slice(0, flip ? memo.total : d.top || 0));
+      const checking = (tag === 'check1' || tag === 'check2' || tag === 'dive') && v !== null && v < n;
+      const pu = d.outer;
+      const cur = pass2 && (tag === 'pop' || tag === 'test2') ? pu : u;
+      const items = pass2 ? groupBoxes(groupsOf(comp, n), pos, 'SCC') : [];
+      const pic = G.picture({
+        n, edges, pos, directed: true,
+        vcls: (x) => (painted(x) ? GW.colour(comp[x]) : !flip && finished.has(x) ? 'done' : onStack.includes(x) ? 'part-b' : '') + (x === cur && tag !== 'after' ? ' focus' : ''),
+        ecls: (a, b) => {
+          if (checking && me.fn === 'fill_order' && a === u && b === v) return 'hot';
+          if (checking && me.fn === 'collect' && a === v && b === u) return 'hot';
+          if (flip) return painted(a) && painted(b) && comp[a] === comp[b] ? 'gw-flip' : 'gw-faint';
+          return memo.parent[b] === a ? 'gw-tree' : '';
+        },
+      });
+      // in pass 2 every arrow is drawn turned round: the transpose
+      if (flip) for (const it of pic) if (it.kind === 'arrow') { const t = it.from; it.from = it.to; it.to = t; }
+      items.push(...pic);
+      if (checking) items.push({ key: 'cv', kind: 'cursor', at: 'gv' + v, side: 'above', text: 'v', cls: 'c-amber' });
+      // order[]: finished vertices pile up in pass 1 and come off the top in pass 2
+      const stack = d.order.slice(0, d.top || 0);
+      const sx = box.x1 + 90, sy = box.y1 - 36;
+      items.push(...GW.tower('os', stack, { x0: sx, y0: sy, w: 60, h: 36, title: 'order[]', ids: stack.map((x) => 'os' + x), cls: (k) => (k === stack.length - 1 ? 'done gw-top' : 'done') }).map((it) => (it.kind === 'cell' ? Object.assign(it, { enter: 'fly', from: { x: pos[it.text].x - 30, y: pos[it.text].y - 18 }, exit: 'fly', toward: { x: pos[it.text].x - 30, y: pos[it.text].y - 18 } }) : it)));
+      items.push({ key: 'phase', kind: 'text', x: box.x0, y: box.y0 - 34, text: flip ? 'pass 2: the arrows turned round, searches in reverse finishing order' : 'pass 1: depth-first search, recording finishing order', cls: 'gw-title' });
+      if (d.calls.length) items.push({ key: 'path', kind: 'text', x: box.x0, y: box.y1 + 46, text: (me && me.fn === 'collect' ? 'collect: ' : 'fill_order: ') + onStack.join(' → '), cls: 'gw-note' });
+      const view = GW.view([box, { x0: box.x0, y0: box.y0 - 50, x1: box.x1, y1: box.y0 }, { x0: sx - 20, y0: Math.min(box.y0, sy - (n - 1) * 40), x1: sx + 80, y1: sy + 60 }, { x0: box.x0, y0: box.y1, x1: box.x1, y1: box.y1 + 56 }]);
+      let say = '';
+      const nc = memo.c || 0;
+      switch (tag) {
+        case 'enter': say = 'scc(' + n + '): a strongly connected component is a group where every vertex can reach every other, following the arrows. Two passes find them.'; break;
+        case 'outer1': say = pu < n ? (d.visited[pu] ? pu + ' is visited already.' : pu + ' is not visited: start a search there.') : 'Pass 1 is over. order[] holds every vertex, the last to finish on top.'; break;
+        case 'start1': say = 'Call fill_order(n, ' + pu + ').'; break;
+        case 'mark': say = 'Mark ' + u + ' visited.'; break;
+        case 'scan1': case 'scan2': say = v < n ? u + ' tries v = ' + v + '.' : 'Every arrow ' + (tag === 'scan2' ? 'into ' : 'out of ') + u + ' has been tried.'; break;
+        case 'check1': say = !GW.has(edges, u, v) ? 'No arrow ' + u + ' → ' + v + '.' : d.visited[v] ? v + ' is visited already.' : 'Arrow ' + u + ' → ' + v + ' to a new vertex: go deeper.'; break;
+        case 'dive': say = me && me.fn === 'collect' ? 'Call collect(n, ' + v + ', ' + me.args.c + ').' : 'Call fill_order(n, ' + v + ').'; break;
+        case 'finish': say = u + ' is finished: order[' + (d.top - 1) + '] = ' + u + '.'; break;
+        case 'reset-loop': say = pu < n ? 'Clear comp[' + pu + '].' : 'Now turn every arrow round. The groups that can reach each other both ways stay the same; the arrows between groups now point the other way.'; break;
+        case 'reset': say = 'comp[' + pu + '] = -1.'; break;
+        case 'loop2': say = d.top > 0 ? 'order[] still holds ' + stack.join(', ') + '.' : 'order[] is empty: every vertex has a component.'; break;
+        case 'pop': say = 'Take the top of order[]: u = ' + pu + ', the latest to finish.'; break;
+        case 'test2': say = painted(pu) ? pu + ' already belongs to SCC ' + comp[pu] + '.' : pu + ' has no component yet: start SCC ' + nc + ' from it.'; break;
+        case 'start2': say = 'Call collect(n, ' + u + ', ' + me.args.c + '). It follows the turned-round arrows.'; break;
+        case 'paint': say = 'comp[' + u + '] = ' + me.args.c + '.'; break;
+        case 'check2': say = !GW.has(edges, v, u) ? 'No arrow ' + v + ' → ' + u + ' in the graph, so none ' + u + ' → ' + v + ' turned round.' : painted(v) ? v + ' already has a component.' : 'The arrow ' + v + ' → ' + u + ' turned round leads from ' + u + ' to ' + v + ': ' + v + ' joins.'; break;
+        case 'return': say = 'scc() returns ' + nc + '.'; break;
+        case 'after': say = nc + ' strongly connected component' + (nc === 1 ? '' : 's') + '. Inside a box every vertex reaches every other; between boxes the arrows only go one way.'; break;
+      }
+      if (!say && ctx.tick.end) say = me ? me.fn + '(' + u + ') returns.' : 'scc() is done.';
+      return { items, say, view, slow: (tag === 'reset-loop' && pu === 0) || tag === 'start2' };
+    },
+    predict: [
+      { at: (t, i, ts) => ts[i + 1] && ts[i + 1].tag === 'pop' && ts.slice(0, i).every((x) => x.tag !== 'pop'), once: true, ask: 'Pass 2 starts with the top of order[]. Click that vertex.', answer: (ts, i) => 'gv' + ts[i].data.order[ts[i].data.top - 1], explain: () => 'The vertex that finished last in pass 1.' },
+      { at: (t) => t.tag === 'enter', once: true, ask: 'How many strongly connected components will there be?', options: (ts, i, ctx) => [...Array(Math.min(ctx.input.n, 6)).keys()].map((k) => String(k + 1)), answer: (ts) => String(Math.max(...ts.map((x) => x.data.c || 0))), pick: 'option', explain: () => 'Each group where you can get from any vertex to any other and back.' },
+    ],
+    quiz: [
+      { q: 'Why does pass 2 use the transposed graph (arrows turned round)?', options: ['It is faster', 'So a search cannot leak from one component into another one downstream', 'To find cycles', 'It does not matter'], answer: 1, why: 'Turning the arrows round keeps each component the same but blocks the way out to the components that were reachable from it.' },
+      { q: 'Why are the pass-2 searches started in reverse finishing order?', options: ['Any order works', 'The vertex finishing last lies in a component that no other component reaches', 'To print them sorted', 'To save memory'], answer: 1, why: 'Starting there, the turned-round arrows lead only into its own component.' },
+      { q: 'A directed graph with no cycles has how many strongly connected components?', options: ['1', 'n', '0', 'n / 2'], answer: 1, why: 'Without cycles no two vertices reach each other, so every vertex is alone.' },
+      { q: 'How long does Kosaraju take with adjacency lists?', options: ['O(n + m)', 'O(n · m)', 'O(n²)', 'O(m log n)'], answer: 0, why: 'Two depth-first searches, each linear. With this matrix version it is O(n²).' },
+    ],
+  });
+
+  // ---- two-colouring: is the graph bipartite? -------------------------------------------------------------
+  X.topic({
+    id: 'bipartite', family: 'gorder', order: 60, title: 'Bipartite check',
+    blurb: 'Breadth-first search that paints each vertex the opposite colour of the one that found it. The vertices slide into two columns; an edge inside one column means an odd cycle, and no two-colouring exists.',
+    code: `int side[MAXV];   /* -1: no colour yet; otherwise 0 or 1 */
+
+/* colour the part of the graph around s; 0 if two neighbours clash */
+int two_colour(int n, int s)
+{
+    int queue[MAXV];
+    int front = 0, rear = 0;
+    int u, v;
+    side[s] = 0;                              /*@ seed */
+    queue[rear++] = s;                        /*@ enqueue-start */
+    while (front < rear) {                    /*@ loop */
+        u = queue[front++];                   /*@ take */
+        for (v = 0; v < n; v++)               /*@ scan */
+            if (adj[u][v]) {                  /*@ test-edge */
+                if (side[v] == -1) {          /*@ test-new */
+                    side[v] = 1 - side[u];    /*@ colour */
+                    queue[rear++] = v;        /*@ enqueue */
+                } else if (side[v] == side[u])   /*@ test-clash */
+                    return 0;                 /*@ clash */
+            }
+    }
+    return 1;                                 /*@ ok */
+}
+
+int is_bipartite(int n)
+{
+    int u;
+    for (u = 0; u < n; u++)                   /*@ init */
+        side[u] = -1;                         /*@ clear */
+    for (u = 0; u < n; u++)                   /*@ outer */
+        if (side[u] == -1 && !two_colour(n, u))   /*@ start */
+            return 0;                         /*@ no */
+    return 1;                                 /*@ yes */
+}`,
+    animate: ['is_bipartite', 'two_colour'],
+    inputs: X.gwUndirInputs(UP.house),
+    presets: [
+      { label: 'House', values: Object.assign({}, UP.house) },
+      { label: 'Triangle', values: { n: 5, graph: '0-1 1-2 2-3 3-1 3-4', pos: [[-240, 0], [-80, -100], [90, -100], [10, 70], [190, 110]] } },
+      { label: 'Tree', values: Object.assign({}, UP.tree) },
+      { label: 'Even ring', values: { n: 6, graph: '0-1 1-2 2-3 3-4 4-5 5-0', pos: null } },
+    ],
+    counters: ['compares', 'writes'],
+    main: (inp) => gMain(inp, '', 'printf("%s\\n", is_bipartite(' + inp.n + ') ? "bipartite" : "not bipartite");', false),
+    capture(P) {
+      const s = (k) => (P.frames[0] && P.frames[0].name === 'two_colour' && P.isSet(k, 0) ? P.val(k, 0) : null);
+      const calls = P.calls(['u']);
+      const outer = calls.find((c) => c.fn === 'is_bipartite');
+      const inner = P.frames[0] && P.frames[0].name === 'two_colour';
+      return { side: GW.ints(P, 'side', 10), queue: inner ? GW.ints(P, 'queue', 10, 0) : null, front: s('front'), rear: s('rear'), u: s('u'), v: s('v'), outer: outer ? outer.args.u : null, inner };
+    },
+    scene(ctx) {
+      const tag = ctx.tick.tag, inp = ctx.input, n = inp.n;
+      const memo = ctx.memo;
+      // a return line is recorded after two_colour has gone: keep its last queue and u, v
+      if (ctx.tick.data.inner) memo.last = ctx.tick.data;
+      const d = Object.assign({}, ctx.tick.data);
+      if (!d.inner && memo.last && (tag === 'clash' || tag === 'ok')) for (const k of ['queue', 'front', 'rear', 'u', 'v']) d[k] = memo.last[k];
+      const edges = G.parse(inp.graph);
+      const orig = G.positions(n, inp.pos);
+      const ob = GW.box(orig, 0);
+      const cx = (ob.x0 + ob.x1) / 2, cy = (ob.y0 + ob.y1) / 2;
+      // uncoloured vertices stay in the middle (a little smaller); coloured ones slide to their side's column
+      const mid = orig.map((p) => ({ x: (p.x - cx) * 0.62, y: (p.y - cy) * 0.62 }));
+      const half = Math.max(...mid.map((p) => Math.abs(p.x))) + 170;
+      const top = Math.min(...mid.map((p) => p.y)) - 10;
+      if (memo.at !== ctx.i) {
+        memo.at = ctx.i;
+        memo.slot = memo.slot || {};
+        memo.count = memo.count || [0, 0];
+        // side[] is a global, so it starts as all 0s: colours count only once the clearing loop is over
+        if (tag === 'outer') memo.started = true;
+        if (memo.started) for (let x = 0; x < n; x++) if (d.side[x] === 0 || d.side[x] === 1) { if (memo.slot[x] === undefined) memo.slot[x] = memo.count[d.side[x]]++; }
+        if (tag === 'clash') memo.clash = [d.u, d.v];
+      }
+      const rows = Math.max(memo.count[0], memo.count[1], 1);
+      const gap = Math.min(80, Math.max(56, (Math.max(...mid.map((p) => p.y)) - top + 40) / Math.max(1, Math.ceil(n / 2))));
+      const col = (x) => (memo.started && (d.side[x] === 0 || d.side[x] === 1) ? d.side[x] : -1);
+      const pos = mid.map((p, x) => (col(x) < 0 ? p : { x: col(x) === 0 ? -half : half, y: top + memo.slot[x] * gap }));
+      const box = GW.box(pos.concat([{ x: -half, y: top }, { x: half, y: top + Math.max(rows, Math.ceil(n / 2)) * gap }]), 30);
+      const q = d.queue && d.front !== null ? d.queue.slice(d.front, d.rear) : [];
+      const clash = memo.clash;
+      const cur = d.u !== null && d.front ? d.u : null;
+      const looking = ['test-edge', 'test-new', 'colour', 'enqueue', 'test-clash', 'clash'].includes(tag) && cur !== null && d.v !== null && d.v < n;
+      const items = [
+        { key: 'h0', kind: 'text', x: -half, y: top - 50, text: 'side 0', cls: 'gw-title', anchor: 'middle' },
+        { key: 'h1', kind: 'text', x: half, y: top - 50, text: 'side 1', cls: 'gw-title', anchor: 'middle' },
+        { key: 'r0', kind: 'region', x: -half - 44, y: top - 40, w: 88, h: Math.max(rows, Math.ceil(n / 2)) * gap + 20, cls: 'gw-c0' },
+        { key: 'r1', kind: 'region', x: half - 44, y: top - 40, w: 88, h: Math.max(rows, Math.ceil(n / 2)) * gap + 20, cls: 'gw-c1' },
+      ];
+      items.push(...G.picture({
+        n, edges, pos,
+        vcls: (x) => (col(x) >= 0 ? GW.colour(col(x)) : '') + (clash && clash.includes(x) ? ' gw-ring' : x === cur && tag !== 'after' ? ' focus' : ''),
+        ecls: (a, b) => {
+          if (clash && ((a === clash[0] && b === clash[1]) || (a === clash[1] && b === clash[0]))) return 'gw-cycle';
+          if (looking && ((a === cur && b === d.v) || (a === d.v && b === cur))) return 'hot';
+          if (col(a) >= 0 && col(b) >= 0) return col(a) !== col(b) ? 'gw-cross2' : 'gw-cycle';
+          return '';
+        },
+      }));
+      // an edge inside one column would be hidden behind the column: bow it out
+      for (const it of items) if (it.kind === 'arrow' && /gw-cycle/.test(it.cls)) { const a = +it.from.key.slice(2), b = +it.to.key.slice(2); it.bend = (col(a) === 0 ? 1 : -1) * (memo.slot[a] < memo.slot[b] ? 1 : -1) * 60; }
+      if (looking) items.push({ key: 'cv', kind: 'cursor', at: 'gv' + d.v, side: 'above', text: 'v', cls: 'c-amber' });
+      const x0 = box.x0 + 70, y0 = box.y1 + 30;
+      items.push(...row('qu', 'queue', q, x0, y0, { ids: (v) => 'q' + v, empty: 'empty', cls: (v) => GW.colour(col(v)) }));
+      items.push(...row('sd', 'side', [...Array(n).keys()], x0, y0 + 62, { ids: (x) => 'sd' + x, sub: (x) => x, cls: (x) => GW.colour(col(x)) }).map((it) => (it.kind === 'cell' ? Object.assign(it, { text: d.side[it.sub] === null ? '' : d.side[it.sub] }) : it)));
+      const view = GW.view([box, { x0: box.x0, y0: top - 70, x1: box.x1, y1: top }, { x0: x0 - 80, y0, x1: x0 + n * 48, y1: y0 + 120 }]);
+      let say = '';
+      const pu = d.outer;
+      const nm = (x) => (col(x) === 0 ? 'side 0' : 'side 1');
+      switch (tag) {
+        case 'enter': say = 'is_bipartite(' + n + '): can the vertices be split into two sides so that every edge goes across?'; break;
+        case 'init': say = pu < n ? 'Clear side[' + pu + '].' : 'No vertex has a side yet.'; break;
+        case 'clear': say = 'side[' + pu + '] = -1.'; break;
+        case 'outer': say = pu < n ? 'Vertex ' + pu + (col(pu) >= 0 ? ' is on ' + nm(pu) + ' already.' : ' has no side yet.') : 'Every part of the graph has been coloured without a clash.'; break;
+        case 'start': say = d.inner ? 'Call two_colour(n, ' + pu + ').' : col(pu) >= 0 ? pu + ' was coloured already.' : 'two_colour found a clash.'; break;
+        case 'seed': say = d.inner ? 'The start goes on side 0. The choice is free: swapping the two sides changes nothing.' : ''; break;
+        case 'enqueue-start': say = 'It goes into the queue.'; break;
+        case 'loop': say = q.length ? 'The queue holds ' + q.join(', ') + '.' : 'The queue is empty: this part of the graph is coloured.'; break;
+        case 'take': say = 'Take u = ' + d.u + ', on ' + nm(d.u) + '. Its neighbours must all be on the other side.'; break;
+        case 'scan': say = d.v < n ? d.u + ' tries v = ' + d.v + '.' : 'All of ' + d.u + '\'s neighbours are done.'; break;
+        case 'test-edge': say = GW.has(edges, d.u, d.v) ? 'Edge ' + d.u + '–' + d.v + '.' : 'No edge ' + d.u + '–' + d.v + '.'; break;
+        case 'test-new': say = col(d.v) < 0 ? d.v + ' has no side yet.' : d.v + ' is on ' + nm(d.v) + ' already.'; break;
+        case 'colour': say = 'side[' + d.v + '] = 1 - side[' + d.u + '] = ' + d.side[d.v] + ': ' + d.v + ' slides across to ' + nm(d.v) + '.'; break;
+        case 'enqueue': say = d.v + ' joins the queue.'; break;
+        case 'test-clash': say = col(d.v) === col(d.u) ? d.u + ' and ' + d.v + ' are both on ' + nm(d.u) + ', and an edge joins them.' : d.v + ' is on the other side: the edge goes across, as it should.'; break;
+        case 'clash': say = 'return 0: the red edge ' + clash[0] + '–' + clash[1] + ' lies inside one side. Following the colours round, it closes a cycle of odd length, and an odd cycle can never be two-coloured.'; break;
+        case 'ok': say = 'return 1: this part of the graph has two clean sides.'; break;
+        case 'no': say = 'is_bipartite() returns 0.'; break;
+        case 'yes': say = 'is_bipartite() returns 1.'; break;
+        case 'after': say = clash ? 'Not bipartite: the graph has an odd cycle.' : 'Bipartite: every edge goes from side 0 to side 1, so the graph has no odd cycle.'; break;
+      }
+      if (!say && ctx.tick.end) say = 'two_colour() returns.';
+      return { items, say, view, slow: tag === 'colour' || tag === 'clash' };
+    },
+    predict: [
+      { at: (t, i, ts) => ts[i + 1] && ts[i + 1].tag === 'colour' && i > 8, once: true, ask: (t) => 'Which side will ' + t.data.v + ' go to?', options: () => ['side 0', 'side 1'], answer: (ts, i) => 'side ' + (1 - ts[i].data.side[ts[i].data.u]), pick: 'option', explain: (ts, i) => 'The opposite of ' + ts[i].data.u + ', which found it.' },
+      { at: (t) => t.tag === 'enter', once: true, ask: 'Is this graph bipartite?', options: () => ['Yes', 'No'], answer: (ts, i, ctx) => (ts.some((x) => x.tag === 'clash') ? 'No' : 'Yes'), pick: 'option', explain: (ts) => (ts.some((x) => x.tag === 'clash') ? 'It has a cycle of odd length.' : 'All its cycles have even length.') },
+    ],
+    quiz: [
+      { q: 'Which graphs are bipartite?', options: ['Those with no cycles at all', 'Exactly those with no cycle of odd length', 'Only trees', 'Those with an even number of vertices'], answer: 1, why: 'Going round a cycle the colours alternate, so you return to the start on the right colour only if the length is even.' },
+      { q: 'Are all trees bipartite?', options: ['Yes', 'No', 'Only binary trees', 'Only if n is even'], answer: 0, why: 'A tree has no cycles at all: colour by even or odd depth.' },
+      { q: 'Why does the check loop over all vertices in is_bipartite()?', options: ['To count them', 'Each component must be coloured separately', 'To find the largest', 'It does not need to'], answer: 1, why: 'A search from one vertex never reaches another component, and an odd cycle could be there.' },
+      { q: 'Could depth-first search do the colouring instead of BFS?', options: ['No', 'Yes: each vertex just takes the opposite colour of the vertex that reached it', 'Only on trees', 'Only for even n'], answer: 1, why: 'Any search works; the order does not change whether a clash exists.' },
+    ],
+  });
+})(SEE);
+
 // ==== topics/graph-1.js ====
 // Graphs: the family and breadth-first search.
 (function (SEE) {
