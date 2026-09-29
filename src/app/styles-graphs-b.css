@@ -1,0 +1,93 @@
+/* Weighted graphs: shortest paths, spanning trees, union-find (kit-wgraph, spath-1, mst-1) */
+.it-arrow.wg .arrow-label { font: 700 17px var(--font); fill: var(--text); paint-order: stroke; stroke: var(--st-bg); stroke-width: 5px; stroke-linejoin: round; }
+.it-arrow.wg .arrow-path { stroke-width: 2.4; }
+.it-arrow.wg.dim .arrow-label { fill: var(--muted); }
+.it-arrow.wg.part-a .arrow-path { stroke-width: 4; }
+.it-arrow.wg.part-a .arrow-label { fill: var(--part-a); }
+.it-arrow.wg.hot .arrow-path { stroke-width: 4; }
+.it-arrow.wg.hot .arrow-label { fill: var(--hot); }
+.it-arrow.wg.bad .arrow-path { stroke-width: 3.5; }
+.it-arrow.wg.bad .arrow-label { fill: var(--bad); }
+.it-arrow.wg.cut .arrow-path { stroke: var(--c-amber); stroke-width: 3; stroke-dasharray: 9 6; }
+.it-arrow.wg.cut .arrow-label { fill: var(--c-amber); }
+.it-arrow.wg.cand .arrow-path { stroke: var(--part-b); stroke-width: 3.5; }
+.it-arrow.wg.cand .arrow-label { fill: var(--part-b); }
+.it-arrow.gb-via .arrow-path { stroke: var(--hot); stroke-width: 3; stroke-dasharray: 8 6; }
+.it-arrow.gb-via .arrow-label { font: 700 14px var(--mono); fill: var(--hot); paint-order: stroke; stroke: var(--st-bg); stroke-width: 5px; }
+.it-arrow.gb-direct .arrow-path { stroke: var(--part-b); stroke-width: 3; stroke-dasharray: 3 5; }
+.it-arrow.gb-direct .arrow-label { font: 700 14px var(--mono); fill: var(--part-b); paint-order: stroke; stroke: var(--st-bg); stroke-width: 5px; }
+.it-arrow.gb-up .arrow-path { stroke-width: 2.4; }
+.it-arrow.gb-up.hot .arrow-path { stroke-width: 3.6; }
+
+/* distance and key badges beside the vertices */
+.it-node.gb-badge .node-box { fill: var(--surface); stroke: var(--c-teal); stroke-width: 2; }
+.it-node.gb-badge .node-text { font: 700 19px var(--mono); fill: var(--c-teal); }
+.it-node.gb-badge.inf .node-box { stroke: var(--node-line); }
+.it-node.gb-badge.inf .node-text { fill: var(--muted); }
+.it-node.gb-badge.final .node-box { fill: var(--part-a); stroke: var(--part-a); }
+.it-node.gb-badge.final .node-text { fill: #fff; }
+.it-node.gb-badge.drop .node-box { fill: var(--hot-soft); stroke: var(--hot); stroke-width: 3; }
+.it-node.gb-badge.drop .node-text { fill: var(--hot); }
+.it-node.gb-badge.bad .node-box { stroke: var(--bad); stroke-width: 3; }
+.it-node.gb-badge.bad .node-text { fill: var(--bad); }
+
+/* edge-list rows */
+.it-node.gb-row .node-text { font: 600 15px var(--mono); }
+.it-node.gb-row .node-cell.w { fill: var(--link-cell); }
+.it-node.gb-row.focus .node-box { stroke: var(--hot); stroke-width: 3; }
+.it-node.gb-row.took .node-box { stroke: var(--part-a); stroke-width: 2.4; }
+.it-node.gb-row.took .node-cell { fill: var(--part-a-soft); }
+.it-node.gb-row.no .node-box { stroke: var(--bad); stroke-dasharray: 5 4; }
+.it-node.gb-row.no .node-text { fill: var(--muted); text-decoration: line-through; }
+.it-node.gb-row.bad .node-box { stroke: var(--bad); stroke-width: 3; }
+.it-node.gb-row.bad .node-cell { fill: var(--freed); }
+.it-node.gb-row.later .node-text { fill: var(--muted); }
+
+/* tables and matrix cells */
+.it-cell.gb-tcell .cell-text { font: 600 17px var(--mono); }
+.it-cell.gb-tcell.inf .cell-text { fill: var(--muted); }
+.it-cell.gb-tcell.lane .cell-box { fill: var(--part-b-soft); stroke: var(--part-b); }
+.it-cell.gb-tcell.via .cell-box { fill: var(--hot-soft); stroke: var(--hot); stroke-width: 2.5; }
+.it-cell.gb-tcell.target .cell-box { stroke: var(--hot); stroke-width: 3.5; }
+.it-cell.gb-tcell.better .cell-box { fill: var(--part-a-soft); stroke: var(--part-a); stroke-width: 2.5; }
+.it-cell.gb-tcell.fresh .cell-box { fill: var(--part-a); stroke: var(--part-a); }
+.it-cell.gb-tcell.fresh .cell-text { fill: #fff; }
+.it-cell.gb-tcell.diag .cell-text { fill: var(--muted); }
+
+/* free text */
+.it-text.gb-head .free-text { font: 700 12px var(--font); fill: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.it-text.gb-rowh .free-text { font: 700 15px var(--mono); fill: var(--text); }
+.it-text.gb-rowh.hot .free-text { fill: var(--hot); }
+.it-text.gb-rowh.done .free-text { fill: var(--part-a); }
+.it-text.gb-title .free-text { font: 700 14px var(--font); fill: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.it-text.gb-big .free-text { font: 750 22px var(--font); fill: var(--text); }
+.it-text.gb-big.bad .free-text { fill: var(--bad); }
+.it-text.gb-big.good .free-text { fill: var(--good); }
+.it-text.gb-note .free-text { font: 600 16px var(--font); fill: var(--text); }
+.it-text.gb-note.hot .free-text { fill: var(--hot); }
+.it-text.gb-note.good .free-text { fill: var(--good); }
+.it-text.gb-note.bad .free-text { fill: var(--bad); }
+.it-text.gb-note.muted .free-text { fill: var(--muted); }
+.it-text.gb-sum .free-text { font: 700 17px var(--mono); fill: var(--hot); paint-order: stroke; stroke: var(--st-bg); stroke-width: 5px; }
+.it-text.gb-sum.good .free-text { fill: var(--good); }
+.it-text.gb-sum.bad .free-text { fill: var(--bad); }
+.it-text.gb-sum.muted .free-text { fill: var(--muted); }
+.it-text.gb-rank .free-text { font: 700 12px var(--mono); fill: var(--muted); }
+
+/* union-find sets: one colour per root */
+.it-vertex.uf-0 .vertex-circle { stroke: var(--c-teal); fill: color-mix(in srgb, var(--c-teal) 18%, var(--node)); stroke-width: 3; }
+.it-vertex.uf-1 .vertex-circle { stroke: var(--c-violet); fill: color-mix(in srgb, var(--c-violet) 18%, var(--node)); stroke-width: 3; }
+.it-vertex.uf-2 .vertex-circle { stroke: var(--c-amber); fill: color-mix(in srgb, var(--c-amber) 18%, var(--node)); stroke-width: 3; }
+.it-vertex.uf-3 .vertex-circle { stroke: var(--c-rose); fill: color-mix(in srgb, var(--c-rose) 18%, var(--node)); stroke-width: 3; }
+.it-vertex.uf-4 .vertex-circle { stroke: var(--c-indigo); fill: color-mix(in srgb, var(--c-indigo) 18%, var(--node)); stroke-width: 3; }
+.it-vertex.uf-5 .vertex-circle { stroke: var(--c-green); fill: color-mix(in srgb, var(--c-green) 18%, var(--node)); stroke-width: 3; }
+.it-vertex.uf-6 .vertex-circle { stroke: var(--c-gray); fill: color-mix(in srgb, var(--c-gray) 18%, var(--node)); stroke-width: 3; }
+.it-vertex.uf-7 .vertex-circle { stroke: var(--part-b); fill: color-mix(in srgb, var(--part-b) 18%, var(--node)); stroke-width: 3; }
+.it-vertex.gb-root .vertex-circle { stroke-width: 4.5; }
+.it-vertex.gb-path .vertex-circle { stroke: var(--hot); stroke-width: 4; }
+.it-vertex.gb-small .vertex-text { font-size: 13px; }
+.it-vertex.focus.uf-0 .vertex-circle, .it-vertex.focus.uf-1 .vertex-circle, .it-vertex.focus.uf-2 .vertex-circle, .it-vertex.focus.uf-3 .vertex-circle,
+.it-vertex.focus.uf-4 .vertex-circle, .it-vertex.focus.uf-5 .vertex-circle, .it-vertex.focus.uf-6 .vertex-circle, .it-vertex.focus.uf-7 .vertex-circle { stroke: var(--hot); stroke-width: 4.5; }
+.it-vertex.bad .vertex-circle { fill: color-mix(in srgb, var(--bad) 22%, var(--node)); }
+.it-region.gb-panel .region-box { fill: var(--surface); stroke: var(--border); stroke-width: 1.5; }
+.it-region.gb-cut .region-box { fill: color-mix(in srgb, var(--part-a) 10%, transparent); stroke: var(--part-a); stroke-width: 1.5; stroke-dasharray: 6 5; }
