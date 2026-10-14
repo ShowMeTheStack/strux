@@ -1,0 +1,74 @@
+Strux
+Copyright (c) 2026 Jyotiprakash Mishra <mail@jyotiprakash.org>
+https://strux.jyotiprakash.org
+
+This notice says which terms cover which parts of this repository. If a file is
+not listed below, it is covered by section 1.
+
+
+1. SOFTWARE AND CONTENT: GNU General Public License v3.0 or later, with an
+   attribution term
+   -------------------------------------------------------------------------------
+
+   Covered: everything in this repository, including the animation stage, the
+   recorder, every topic (its C code, its picture, its narration, its predictions
+   and its quiz), the courses, the C89 compiler, simulated machine and C library
+   it shares with See, the build and test tools, and the built index.html.
+
+   License text: LICENSE (GNU GPL v3.0). You may use, modify and distribute this
+   work under GPL-3.0-or-later. Derived works must be distributed under the same
+   license, with their complete corresponding source code.
+
+   Additional term under section 7(b) of the GNU GPL v3.0:
+   Every copy and every derived work must preserve the following author
+   attribution, both in the source files and in the Appropriate Legal Notices
+   displayed by any work that contains or is built from this software (for an
+   interactive program or a website, in an "About" box or on a page that is
+   reachable from every screen, such as an "About" or "Credits" page):
+
+       Based on "Strux" by Jyotiprakash Mishra
+       (https://strux.jyotiprakash.org)
+
+   This applies equally to modified versions, translations, ports to other
+   languages, and works that include any part of the topics, their narration,
+   their quizzes or the courses, including screenshots or recordings of the
+   animations used as teaching material. Removing or obscuring this attribution
+   is a violation of the license, and under section 8 of the GNU GPL it
+   terminates your rights under it.
+
+   Additional term under section 7(c) of the GNU GPL v3.0:
+   Modified versions must be marked as changed from the original, in reasonable
+   ways, and must not be presented as the original Strux.
+
+
+2. NAMES (not licensed)
+   -------------------------------------------------------------------------------
+
+   The names "Strux" and "See" as the names of these programs, and the domains
+   strux.jyotiprakash.org and see.jyotiprakash.org, identify the author's work.
+   Under section 7(e) of the GNU GPL v3.0, no rights are granted to use them for
+   a derived work, except to give the attribution required above.
+
+
+3. THE C LANGUAGE AND THE ALGORITHMS
+   -------------------------------------------------------------------------------
+
+   Strux runs programs written in the C programming language as standardised in
+   ANSI X3.159-1989 and ISO/IEC 9899:1990 ("C89"/"C90"), on the compiler and
+   machine of See, which were written from scratch. The algorithms shown are the
+   classic ones found in every textbook; the C code for each of them, the
+   pictures and the explanations were written for Strux.
+
+
+4. TRADEMARKS
+   -------------------------------------------------------------------------------
+
+   UNIX is a registered trademark of The Open Group. Intel and x86 are
+   trademarks of Intel Corporation. Chrome and Chromium are trademarks of Google
+   LLC. Safari is a trademark of Apple Inc. Firefox is a trademark of the Mozilla
+   Foundation. GitHub is a trademark of GitHub, Inc. All other trademarks are the
+   property of their respective owners.
+
+   These names are used only to describe compatibility. Strux is an independent
+   work. It is not affiliated with, endorsed by, or sponsored by any of these
+   organisations.
