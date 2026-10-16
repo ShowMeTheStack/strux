@@ -23,6 +23,7 @@
   const lerp = (a, b, t) => a + (b - a) * t;
   const svg = (tag, attrs) => { const e = document.createElementNS(NS, tag); if (attrs) for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
 
+  let clipSeq = 0;
   class Stage {
     constructor(el, opts) {
       this.el = el;
@@ -218,13 +219,19 @@
       const g = svg('g', { 'data-key': s.key });
       switch (s.kind) {
         case 'node': {
-          g.appendChild(svg('rect', { class: 'node-box', rx: '7' }));
-          g.appendChild(svg('g', { class: 'node-cells' }));
+          // the cells are clipped to the box's rounded corners, and parted by thin lines
+          const id = 'strux-clip-' + (++clipSeq);
+          const cp = svg('clipPath', { id });
+          cp.appendChild(svg('rect', { class: 'node-clip', rx: '8' }));
+          g.appendChild(cp);
+          g.appendChild(svg('rect', { class: 'node-box', rx: '8' }));
+          g.appendChild(svg('g', { class: 'node-cells', 'clip-path': 'url(#' + id + ')' }));
+          g.appendChild(svg('g', { class: 'node-seps' }));
           g.appendChild(svg('text', { class: 'node-label', 'text-anchor': 'middle' }));
           break;
         }
-        case 'cell': g.appendChild(svg('rect', { class: 'cell-box', rx: '4' })); g.appendChild(svg('text', { class: 'cell-text', 'text-anchor': 'middle' })); g.appendChild(svg('text', { class: 'cell-sub', 'text-anchor': 'middle' })); break;
-        case 'bar': g.appendChild(svg('rect', { class: 'bar-box', rx: '3' })); g.appendChild(svg('text', { class: 'bar-text', 'text-anchor': 'middle' })); break;
+        case 'cell': g.appendChild(svg('rect', { class: 'cell-box', rx: '7' })); g.appendChild(svg('text', { class: 'cell-text', 'text-anchor': 'middle' })); g.appendChild(svg('text', { class: 'cell-sub', 'text-anchor': 'middle' })); break;
+        case 'bar': g.appendChild(svg('rect', { class: 'bar-box', rx: '4' })); g.appendChild(svg('text', { class: 'bar-text', 'text-anchor': 'middle' })); break;
         case 'arrow': g.appendChild(svg('path', { class: 'arrow-path' })); g.appendChild(svg('text', { class: 'arrow-label', 'text-anchor': 'middle' })); break;
         case 'cursor': g.appendChild(svg('path', { class: 'cursor-stem' })); g.appendChild(svg('rect', { class: 'cursor-tag', rx: '5' })); g.appendChild(svg('text', { class: 'cursor-text', 'text-anchor': 'middle' })); break;
         case 'text': g.appendChild(svg('text', { class: 'free-text' })); break;
@@ -277,9 +284,15 @@
           const cells = s.cells || [];
           const total = cells.reduce((a, x) => a + (x.w || 1), 0) || 1;
           const rects = g.querySelectorAll('.node-cells rect'), texts = g.querySelectorAll('.node-cells text');
+          const cl = g.querySelector('.node-clip');
+          cl.setAttribute('x', c.x + 0.8); cl.setAttribute('y', c.y + 0.8); cl.setAttribute('width', Math.max(0, c.w - 1.6)); cl.setAttribute('height', Math.max(0, c.h - 1.6));
+          const seps = g.querySelector('.node-seps');
+          while (seps.childNodes.length < Math.max(0, cells.length - 1)) seps.appendChild(svg('line', { class: 'node-sep' }));
+          while (seps.childNodes.length > Math.max(0, cells.length - 1)) seps.lastChild.remove();
           let x = c.x;
           cells.forEach((cell, i) => {
             const w = c.w * (cell.w || 1) / total;
+            if (i) { const l = seps.childNodes[i - 1]; l.setAttribute('x1', x); l.setAttribute('x2', x); l.setAttribute('y1', c.y); l.setAttribute('y2', c.y + c.h); }
             rects[i].setAttribute('x', x); rects[i].setAttribute('y', c.y); rects[i].setAttribute('width', Math.max(0, w)); rects[i].setAttribute('height', Math.max(0, c.h));
             texts[i].setAttribute('x', x + w / 2); texts[i].setAttribute('y', c.y + c.h / 2 + 5);
             x += w;

@@ -205,7 +205,9 @@ input[type="text"]:focus, input[type="number"]:focus, input[type="search"]:focus
 
 /* SVG items */
 .node-box { fill: var(--node); stroke: var(--node-line); stroke-width: 1.6; filter: drop-shadow(0 2px 3px rgba(20, 24, 50, 0.08)); }
-.node-cell { fill: transparent; stroke: var(--node-line); stroke-width: 1; }
+.node-cell { fill: transparent; stroke: none; }
+.node-sep { stroke: var(--node-line); stroke-width: 1.2; }
+.it-node .node-box { stroke-linejoin: round; }
 .node-cell.link { fill: var(--link-cell); }
 .node-cell.hot { fill: var(--hot-soft); }
 .node-text { font: 600 17px var(--font); fill: var(--node-text); }
